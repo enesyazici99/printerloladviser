@@ -84,7 +84,7 @@ export function MetaPageClient() {
               <tr key={r.id} className="border-b border-border last:border-b-0 hover:bg-white/[0.02]" data-testid="meta-row">
                 <td className="tabular px-3 py-1.5 text-fg-muted">{i + 1}</td>
                 <td className="px-3 py-1.5">
-                  <Link href={`/champion/${data.champions[r.id]?.key}/`} className="flex items-center gap-2 font-medium text-fg hover:text-accent">
+                  <Link href={`/champion/${data.champions[r.id]?.key}/`} prefetch={false} className="flex items-center gap-2 font-medium text-fg hover:text-accent">
                     <ChampionIcon id={r.id} size={30} />
                     {data.champions[r.id]?.name}
                   </Link>

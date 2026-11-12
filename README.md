@@ -19,6 +19,8 @@ Challenger / Grandmaster solo-queue games (one-trick players are flagged).
 
 Turkish and English UI. The site is a static export; there is no server.
 
+**Live:** https://ygappstudio.com/lol-advisor/
+
 ## How it works
 
 ```

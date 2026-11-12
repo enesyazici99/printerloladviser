@@ -71,7 +71,7 @@ export function HomeClient() {
         ) : (
           <div className="grid grid-cols-5 gap-x-1 gap-y-2 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-[repeat(14,minmax(0,1fr))]">
             {visible.map((c) => (
-              <Link key={c.id} href={`/champion/${c.key}/`} className="group flex flex-col items-center gap-1 rounded-md p-1 hover:bg-surface-tertiary" data-champion={c.key}>
+              <Link key={c.id} href={`/champion/${c.key}/`} prefetch={false} className="group flex flex-col items-center gap-1 rounded-md p-1 hover:bg-surface-tertiary" data-champion={c.key}>
                 <ChampionIcon id={c.id} size={52} className="h-[52px] w-[52px] ring-1 ring-border group-hover:ring-accent" />
                 <span className="w-full truncate text-center text-[11px] text-fg-secondary group-hover:text-fg">{c.name}</span>
               </Link>
@@ -93,7 +93,7 @@ export function HomeClient() {
                 <ul className="space-y-1.5">
                   {picks.map((p) => (
                     <li key={p.id}>
-                      <Link href={`/champion/${data.champions[p.id]?.key}/`} className="flex items-center gap-2 rounded text-sm hover:bg-surface-tertiary">
+                      <Link href={`/champion/${data.champions[p.id]?.key}/`} prefetch={false} className="flex items-center gap-2 rounded text-sm hover:bg-surface-tertiary">
                         <ChampionIcon id={p.id} size={26} />
                         <span className="min-w-0 flex-1 truncate text-fg-secondary">{data.champions[p.id]?.name}</span>
                         <span className="tabular text-[11px] text-fg-muted" title={t("common.pickRate")}>

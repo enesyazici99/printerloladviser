@@ -136,7 +136,7 @@ export function BuildPaths({ s }: { s: BuildSummary }) {
     <div className="panel grid divide-border md:grid-cols-[auto_minmax(0,1fr)] md:divide-x" data-testid="build-paths">
       <Card title={t("champ.summary.start")}>
         <div className="space-y-2">
-          {s.starters.slice(0, 2).map((st) => (
+          {s.starters.filter((st, i) => i === 0 || st.pct >= 0.05).slice(0, 2).map((st) => (
             <div key={st.value.join(".")} className="flex items-center gap-1.5">
               {st.value.map((id, i) => (
                 <ItemIcon key={i} id={id} size={28} />

@@ -223,6 +223,7 @@ async function main() {
   const limits = Object.fromEntries(PLATFORMS.map((p) => [p, pLimit(2)]));
   let done = 0;
   let skipped = 0;
+  const reasons = {}; // why matches were skipped, reported at the end
   await Promise.all(
     queue.map(([platform, matchId]) =>
       limits[platform](async () => {
@@ -233,6 +234,8 @@ async function main() {
           const valid = info && info.queueId === 420 && info.gameDuration >= 600 && !info.participants[0]?.gameEndedInEarlySurrender && comps;
           if (!valid) {
             skipped++;
+            const why = !info ? "match not found" : info.queueId !== 420 ? "other queue" : !comps ? "incomplete teams" : "remake or too short";
+            reasons[why] = (reasons[why] ?? 0) + 1;
             if (info) db.m[matchId] = null; // remember remakes so they are not requested again
           } else {
             const tracked = info.participants.filter((p) => ladder.has(p.puuid));
@@ -261,6 +264,8 @@ async function main() {
         } catch (err) {
           if (err.code === "RIOT_KEY") throw err; // key no longer accepted: stop, do not retry
           skipped++;
+          const why = `error: ${String(err?.message ?? err).slice(0, 80)}`;
+          reasons[why] = (reasons[why] ?? 0) + 1;
         }
         if (++done % 100 === 0) {
           log(`matches: ${done}/${queue.length} (${skipped} skipped, ${riot.requestCount} requests)`);
@@ -269,7 +274,7 @@ async function main() {
       })
     )
   );
-  log(`matches: ${done} processed, ${skipped} skipped`);
+  log(`matches: ${done} processed, ${skipped} skipped`, skipped ? JSON.stringify(reasons) : "");
 
   // ── 4. retention, one-trick flags ───────────────────────────────────────
   const cutoff = Date.now() / 1000 - MAX_AGE_DAYS * 86400;
