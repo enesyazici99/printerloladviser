@@ -162,7 +162,7 @@ const STRINGS = {
     "meta.sample": "Örneklem: {n} maç · Yamalar: {p}",
     "footer.source": "Veriler Riot Games API'sinden (Challenger ve Grandmaster tek/çift sıralı maçlar) derlenir.",
     "footer.legal":
-      "LoL Advisor, Riot Games tarafından desteklenmemektedir ve Riot Games'in ya da League of Legends'ın yapımında veya yönetiminde resmi olarak yer alan kişilerin görüş ve fikirlerini yansıtmaz.",
+      "printerloladviser, Riot Games tarafından desteklenmemektedir ve Riot Games'in ya da League of Legends'ın yapımında veya yönetiminde resmi olarak yer alan kişilerin görüş ve fikirlerini yansıtmaz.",
   },
   en: {
     "nav.builds": "Pro Builds",
@@ -319,7 +319,7 @@ const STRINGS = {
     "meta.sample": "Sample: {n} matches · Patches: {p}",
     "footer.source": "Data is compiled from the Riot Games API (Challenger and Grandmaster ranked solo games).",
     "footer.legal":
-      "LoL Advisor isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends.",
+      "printerloladviser isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends.",
   },
 } as const;
 

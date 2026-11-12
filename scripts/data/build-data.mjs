@@ -3,15 +3,18 @@
 // official Riot Games API: Challenger + Grandmaster solo-queue ladders,
 // match-v5 results and match timelines (item purchase order, skill order).
 //
-//   node scripts/data/build-data.mjs [--platforms=kr,euw1,na1] [--max-matches=1500]
-//        [--days=14] [--full] [--bootstrap=<published site url>] [--out=<dir>]
+//   node scripts/data/build-data.mjs [--platforms=kr,euw1,...] [--max-matches=3000]
+//        [--max-minutes=N] [--players=400] [--days=14] [--full]
+//        [--bootstrap=<published site url>] [--out=<dir>]
 //
 // Runs are incremental: the previous output (local, or the published site given
 // with --bootstrap) is loaded first and only unseen matches are requested.
+// --max-minutes makes a long run stop cleanly: what was collected is aggregated
+// and written, the rest is picked up by the next run.
 import path from "node:path";
 import { createRiotClient, loadRiotKey, PLATFORM_REGION } from "./riot.mjs";
 import { buildStatic } from "./static.mjs";
-import { getJson, pLimit, readJsonFile, writeJsonFile, log } from "./util.mjs";
+import { getJson, pLimit, readJsonFile, sleep, writeJsonFile, log } from "./util.mjs";
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => {
@@ -24,11 +27,17 @@ const OUT = path.resolve(typeof args.out === "string" ? args.out : "public/data"
 const CACHE = path.resolve(".cache/data");
 const BOOTSTRAP = typeof args.bootstrap === "string" ? args.bootstrap.replace(/\/$/, "") : null;
 const FULL = Boolean(args.full);
-const PLATFORMS = (typeof args.platforms === "string" ? args.platforms : "kr,euw1,na1").split(",");
-const MAX_MATCHES = Number(args["max-matches"] ?? 1500); // new matches per run (2 requests each)
+// Four routing hosts, each with its own rate limit: asia (kr, jp1), europe (euw1, eun1, tr1),
+// americas (na1, br1, la1, la2), sea (vn2, tw2, oc1).
+const DEFAULT_PLATFORMS = "kr,euw1,na1,eun1,tr1,br1,jp1,vn2,tw2,oc1,la1,la2";
+const PLATFORMS = (typeof args.platforms === "string" ? args.platforms : DEFAULT_PLATFORMS).split(",");
+const MAX_MATCHES = Number(args["max-matches"] ?? 3000); // new matches per run (2 requests each)
+const MAX_MINUTES = Number(args["max-minutes"] ?? Infinity); // stop collecting after this long
+const MAX_PLAYERS = Number(args.players ?? 400); // highest-ranked players scanned per platform
+const IDS_PER_PLAYER = 100; // the most the match-id endpoint returns per request
 const LOOKBACK_DAYS = Number(args.days ?? 14);
 const MAX_AGE_DAYS = 120; // feed rows older than this are dropped
-const MAX_PER_CHAMPION = 400;
+const MAX_PER_CHAMPION = 600;
 const STATS_PATCHES = 3; // draft/meta statistics use the newest N patches
 const MIN_PAIR_GAMES = 3; // pairs with fewer games carry no signal after shrinkage
 const OTP_MIN_GAMES = 8;
@@ -179,102 +188,160 @@ async function main() {
     for (const [tier, short] of [["challenger", "C"], ["grandmaster", "GM"]]) {
       const league = await riot.league(platform, tier);
       for (const e of league?.entries ?? []) {
-        if (e.puuid) ladder.set(e.puuid, { platform, tier: short, lp: e.leaguePoints });
+        if (e.puuid) ladder.set(e.puuid, { platform, tier: short, lp: e.leaguePoints, games: e.wins + e.losses });
       }
     }
   }
   log(`ladder: ${ladder.size} Challenger/Grandmaster players on ${PLATFORMS.join(", ")}`);
 
-  // ── 2. new match ids, highest ranked players first ──────────────────────
+  const scannedPlayers = [];
+  // ── 2 + 3. scan players for new matches and process them as they are found ──
+  // Requests of both kinds share each routing host's rate limit, so scanning and
+  // processing are interleaved instead of scanning everything first.
   const startTime = Math.round(Date.now() / 1000) - LOOKBACK_DAYS * 86400;
-  const perPlatform = Math.ceil(MAX_MATCHES / PLATFORMS.length);
-  const queue = []; // [platform, matchId]
-  await Promise.all(
-    PLATFORMS.map(async (platform) => {
-      const players = [...ladder.entries()].filter(([, e]) => e.platform === platform).sort((a, b) => b[1].lp - a[1].lp);
-      const seen = new Set();
-      for (const [puuid] of players) {
-        if (seen.size >= perPlatform) break;
-        const ids = (await riot.matchIds(platform, puuid, { count: 20, startTime })) ?? [];
-        for (const id of ids) {
-          if (seen.size >= perPlatform) break;
-          if (!db.m[id] && !seen.has(id)) {
-            seen.add(id);
-            queue.push([platform, id]);
-          }
-        }
-      }
-      log(`ids: ${platform} -> ${seen.size} new matches`);
-    })
-  );
+  const deadline = started + MAX_MINUTES * 60_000;
+  const outOfTime = () => Date.now() > deadline;
+  db.seen ??= {}; // puuid -> ranked games played when the player was last scanned completely
 
-  // ── 3. match + timeline -> feed rows and database rows ──────────────────
   const dirty = new Set();
   const flush = async () => {
     await writeJsonFile(path.join(OUT, "db", "matches.json"), db);
     for (const id of dirty) {
       const c = stat.champions[id];
-      if (c) await writeJsonFile(path.join(OUT, "champions", `${c.key}.json`), { id, key: c.key, matches: feeds.get(id), lane: {} });
+      if (!c) continue;
+      // Keep memory and files bounded during long runs; final retention happens in step 4.
+      const rows = feeds.get(id).sort((a, b) => b.t - a.t).slice(0, MAX_PER_CHAMPION);
+      feeds.set(id, rows);
+      await writeJsonFile(path.join(OUT, "champions", `${c.key}.json`), { id, key: c.key, matches: rows, lane: {} });
     }
     dirty.clear();
   };
-  // One small worker pool per platform, so every routing host stays busy; the
-  // client itself spaces the requests of each host to respect the rate limit.
-  const limits = Object.fromEntries(PLATFORMS.map((p) => [p, pLimit(2)]));
+
+  let queued = 0;
   let done = 0;
   let skipped = 0;
+  let deferred = 0; // found but not processed because the time budget ran out
+  let scanned = 0;
+  let unchanged = 0;
   const reasons = {}; // why matches were skipped, reported at the end
-  await Promise.all(
-    queue.map(([platform, matchId]) =>
-      limits[platform](async () => {
-        try {
-          const match = await riot.match(platform, matchId);
-          const info = match?.info;
-          const comps = info ? compositions(info) : null;
-          const valid = info && info.queueId === 420 && info.gameDuration >= 600 && !info.participants[0]?.gameEndedInEarlySurrender && comps;
-          if (!valid) {
-            skipped++;
-            const why = !info ? "match not found" : info.queueId !== 420 ? "other queue" : !comps ? "incomplete teams" : "remake or too short";
-            reasons[why] = (reasons[why] ?? 0) + 1;
-            if (info) db.m[matchId] = null; // remember remakes so they are not requested again
-          } else {
-            const tracked = info.participants.filter((p) => ladder.has(p.puuid));
-            const tl = tracked.length ? readTimeline(await riot.timeline(platform, matchId)) : { items: {}, skills: {} };
-            const ts = Math.round((info.gameEndTimestamp ?? info.gameCreation) / 1000);
-            const patch = info.gameVersion.split(".").slice(0, 2).join(".");
-            db.m[matchId] = [ts, patch, comps[2], comps[3], comps[0], comps[1]];
-            for (const p of info.participants) {
-              const counts = (db.pl[playerKey(platform, p)] ??= {});
-              counts[p.championId] = (counts[p.championId] ?? 0) + 1;
-            }
-            for (const p of tracked) {
-              const opponent = info.participants.find((o) => o.teamId !== p.teamId && o.teamPosition === p.teamPosition && p.teamPosition);
-              const rec = feedRecord(match, p, opponent, tl, ladder.get(p.puuid), platform, stat.items);
-              const mine = p.teamId === 100 ? 0 : 1;
-              rec.tm = comps[mine];
-              rec.en = comps[1 - mine];
-              rec.ro = comps[3];
-              const list = feeds.get(p.championId);
-              if (list && !list.some((m) => m.id === rec.id && m.p.n === rec.p.n)) {
-                list.push(rec);
-                dirty.add(p.championId);
-              }
-            }
+  const queuedIds = new Set();
+
+  async function processMatch(platform, matchId) {
+    if (outOfTime()) {
+      deferred++;
+      return;
+    }
+    try {
+      const match = await riot.match(platform, matchId);
+      const info = match?.info;
+      const comps = info ? compositions(info) : null;
+      const valid = info && info.queueId === 420 && info.gameDuration >= 600 && !info.participants[0]?.gameEndedInEarlySurrender && comps;
+      if (!valid) {
+        skipped++;
+        const why = !info ? "match not found" : info.queueId !== 420 ? "other queue" : !comps ? "incomplete teams" : "remake or too short";
+        reasons[why] = (reasons[why] ?? 0) + 1;
+        if (info) db.m[matchId] = null; // remember remakes so they are not requested again
+      } else {
+        const tracked = info.participants.filter((p) => ladder.has(p.puuid));
+        const tl = tracked.length ? readTimeline(await riot.timeline(platform, matchId)) : { items: {}, skills: {} };
+        const ts = Math.round((info.gameEndTimestamp ?? info.gameCreation) / 1000);
+        const patch = info.gameVersion.split(".").slice(0, 2).join(".");
+        db.m[matchId] = [ts, patch, comps[2], comps[3], comps[0], comps[1]];
+        for (const p of info.participants) {
+          const counts = (db.pl[playerKey(platform, p)] ??= {});
+          counts[p.championId] = (counts[p.championId] ?? 0) + 1;
+        }
+        for (const p of tracked) {
+          const opponent = info.participants.find((o) => o.teamId !== p.teamId && o.teamPosition === p.teamPosition && p.teamPosition);
+          const rec = feedRecord(match, p, opponent, tl, ladder.get(p.puuid), platform, stat.items);
+          const mine = p.teamId === 100 ? 0 : 1;
+          rec.tm = comps[mine];
+          rec.en = comps[1 - mine];
+          rec.ro = comps[3];
+          const list = feeds.get(p.championId);
+          if (list && !list.some((m) => m.id === rec.id && m.p.n === rec.p.n)) {
+            list.push(rec);
+            dirty.add(p.championId);
           }
+        }
+      }
+    } catch (err) {
+      if (err.code === "RIOT_KEY") throw err; // key no longer accepted: stop, do not retry
+      skipped++;
+      const why = `error: ${String(err?.message ?? err).slice(0, 80)}`;
+      reasons[why] = (reasons[why] ?? 0) + 1;
+    }
+    if (++done % 500 === 0) {
+      log(`matches: ${done} processed, ${queued - done - deferred} waiting (${skipped} skipped, ${riot.requestCount} requests, ${Math.round((Date.now() - started) / 60000)} min)`);
+      await flush();
+    }
+  }
+
+  // Two workers per platform keep every routing host busy; the client spaces each host's requests.
+  const tasks = [];
+  let fatal = null;
+  await Promise.all(
+    PLATFORMS.map(async (platform) => {
+      const limit = pLimit(2);
+      let waiting = 0;
+      let mine = 0; // matches queued for this platform
+      // No single server may use up the whole budget before the others have been looked at.
+      const platformCap = Math.ceil((MAX_MATCHES / PLATFORMS.length) * 2);
+      const players = [...ladder.entries()]
+        .filter(([, e]) => e.platform === platform)
+        .sort((a, b) => b[1].lp - a[1].lp)
+        .slice(0, MAX_PLAYERS);
+      for (const [puuid, entry] of players) {
+        if (queued >= MAX_MATCHES || mine >= platformCap || outOfTime() || fatal) break;
+        // A player whose ranked game count has not moved since the last complete scan has nothing new.
+        if (!FULL && db.seen[puuid] === entry.games) {
+          unchanged++;
+          continue;
+        }
+        let ids;
+        try {
+          ids = (await riot.matchIds(platform, puuid, { count: IDS_PER_PLAYER, startTime })) ?? [];
         } catch (err) {
-          if (err.code === "RIOT_KEY") throw err; // key no longer accepted: stop, do not retry
-          skipped++;
-          const why = `error: ${String(err?.message ?? err).slice(0, 80)}`;
-          reasons[why] = (reasons[why] ?? 0) + 1;
+          fatal ??= err;
+          break;
         }
-        if (++done % 100 === 0) {
-          log(`matches: ${done}/${queue.length} (${skipped} skipped, ${riot.requestCount} requests)`);
-          await flush();
+        scanned++;
+        let complete = true;
+        for (const id of ids) {
+          if (id in db.m || queuedIds.has(id)) continue; // known (including remembered remakes) or already queued
+          if (queued >= MAX_MATCHES || mine >= platformCap) {
+            complete = false;
+            break;
+          }
+          queuedIds.add(id);
+          queued++;
+          mine++;
+          waiting++;
+          tasks.push(
+            limit(() => processMatch(platform, id).finally(() => waiting--)).catch((err) => {
+              fatal ??= err; // e.g. the key was rejected: reported once, after everything has settled
+            })
+          );
         }
-      })
-    )
+        if (complete) scannedPlayers.push([puuid, entry.games]);
+        // Do not let the scan run far ahead of the processing.
+        while (waiting > 150 && !outOfTime() && !fatal) await sleep(3000);
+      }
+    })
   );
-  log(`matches: ${done} processed, ${skipped} skipped`, skipped ? JSON.stringify(reasons) : "");
+  await Promise.all(tasks);
+  // A key that expires in the middle of a long run should not throw away what was
+  // already collected: keep it, say so, and let the next run fail at its first request.
+  const keyLost = fatal?.code === "RIOT_KEY" && done - skipped > 0;
+  if (fatal && !keyLost) throw fatal;
+  // Remember scanned players only when everything they led to was processed;
+  // otherwise the next run has to look at them again.
+  if (deferred === 0 && !keyLost) for (const [puuid, games] of scannedPlayers) db.seen[puuid] = games;
+  for (const puuid of Object.keys(db.seen)) if (!ladder.has(puuid)) delete db.seen[puuid];
+  log(
+    `players: ${scanned} scanned, ${unchanged} unchanged · matches: ${done - skipped} added, ${skipped} skipped, ${deferred} left for the next run`,
+    skipped ? JSON.stringify(reasons) : ""
+  );
 
   // ── 4. retention, one-trick flags ───────────────────────────────────────
   const cutoff = Date.now() / 1000 - MAX_AGE_DAYS * 86400;
@@ -342,10 +409,13 @@ async function main() {
     }
     for (let r = 0; r < 5; r++) for (let r2 = 0; r2 < 5; r2++) bump(matchup, blue[r], r, red[r2], r2, blueWin === 1);
   }
+  // With a large sample, pairs seen only a handful of times carry no signal after
+  // shrinkage; dropping them keeps draft.json at a few megabytes.
+  const minPairGames = Math.max(MIN_PAIR_GAMES, Math.ceil(statMatches / 15000));
   const flat = (map) => {
     const out = [];
     for (const [key, [g, w]] of map) {
-      if (g < MIN_PAIR_GAMES) continue;
+      if (g < minPairGames) continue;
       const [a, ra, b, rb] = key.split(".").map(Number);
       out.push(a, ra, b, rb, g, w);
     }
@@ -402,6 +472,10 @@ async function main() {
   });
 
   log(`done in ${Math.round((Date.now() - started) / 1000)}s — ${riot.requestCount} Riot requests, ${feedAll.length} feed rows, ${statMatches} matches in stats`);
+  if (keyLost) {
+    const note = "The Riot API key was rejected during this run. What had been collected was saved; renew the key (npm run key:push) for the next refresh.";
+    console.log(process.env.GITHUB_ACTIONS ? `::warning::${note}` : `WARNING: ${note}`);
+  }
 }
 
 main().catch((err) => {

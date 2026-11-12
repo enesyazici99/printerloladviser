@@ -1,7 +1,7 @@
 [package]
 name = "lol-advisor"
 version = "0.1.0"
-description = "LOL Advisor Desktop Companion"
+description = "printerloladviser desktop companion"
 authors = ["you"]
 edition = "2021"
 

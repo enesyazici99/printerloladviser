@@ -1,17 +1,17 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicotsx/tauri/v2/crates/tauri-cli/schema.json",
-  "productName": "LOL Advisor",
+  "productName": "printerloladviser",
   "version": "0.1.0",
   "identifier": "com.lol-advisor.app",
   "build": {
-    "frontendDist": "https://ygappstudio.com/lol-advisor/draft/",
+    "frontendDist": "https://ygappstudio.com/printerloladviser/draft/",
     "devUrl": "http://localhost:3000"
   },
   "app": {
     "withGlobalTauri": false,
     "windows": [
       {
-        "title": "LOL Advisor",
+        "title": "printerloladviser",
         "width": 1100,
         "height": 750,
         "minWidth": 800,
@@ -27,7 +27,7 @@
     "trayIcon": {
       "iconPath": "icons/icon.png",
       "iconAsTemplate": false,
-      "tooltip": "LOL Advisor"
+      "tooltip": "printerloladviser"
     }
   },
   "bundle": {

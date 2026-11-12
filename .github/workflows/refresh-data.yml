@@ -1,0 +1,63 @@
+name: Refresh data from the Riot API
+
+# Collects new Challenger/Grandmaster games, stores the result as a release
+# asset ("data-snapshot") and then starts the deploy workflow.
+#
+# Needs the repository secret RIOT_API_KEY. When the key is missing or expired
+# this workflow fails (that is the signal to renew the key); the published site
+# simply keeps the last snapshot.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      max_matches:
+        description: "Most new matches to collect in this run"
+        default: "40000"
+      max_minutes:
+        description: "Stop collecting after this many minutes (job limit is 6 hours)"
+        default: "270"
+      days:
+        description: "How many days back to look for games"
+        default: "14"
+
+permissions:
+  contents: write # upload the snapshot to a release
+  actions: write # start the deploy workflow
+
+# Never two collectors at once: they would share the API rate limit.
+concurrency:
+  group: data-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore data snapshot
+        run: bash scripts/ci/snapshot.sh restore
+
+      - name: Collect new matches
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+        run: >
+          node scripts/data/build-data.mjs
+          --max-matches=${{ github.event.inputs.max_matches || '40000' }}
+          --max-minutes=${{ github.event.inputs.max_minutes || '270' }}
+          --days=${{ github.event.inputs.days || '14' }}
+
+      - name: Save data snapshot
+        run: bash scripts/ci/snapshot.sh save
+
+      - name: Start deploy
+        run: gh workflow run deploy.yml --ref "${{ github.event.repository.default_branch }}"

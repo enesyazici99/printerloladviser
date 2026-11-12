@@ -15,8 +15,16 @@ export const PLATFORM_REGION = {
   euw1: "europe",
   eun1: "europe",
   tr1: "europe",
+  ru: "europe",
+  me1: "europe",
   na1: "americas",
   br1: "americas",
+  la1: "americas",
+  la2: "americas",
+  oc1: "sea",
+  sg2: "sea",
+  tw2: "sea",
+  vn2: "sea",
 };
 
 const MIN_GAP_MS = 1300; // 120s / 1.3s ≈ 92 requests per 2 minutes per host

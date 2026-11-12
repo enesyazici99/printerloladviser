@@ -19,8 +19,8 @@ export function Header() {
     <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-[1240px] items-center gap-3 px-3 sm:gap-6 sm:px-5">
         <Link href="/" className="flex shrink-0 items-center gap-2 text-[15px] font-bold tracking-tight text-fg">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-accent text-xs font-black text-white">LA</span>
-          <span className="hidden sm:inline">LoL Advisor</span>
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-accent text-xs font-black text-white">PL</span>
+          <span className="hidden sm:inline">printerloladviser</span>
         </Link>
         <nav aria-label="Main" className="flex min-w-0 flex-1 items-center gap-1">
           {links.map((l) => (

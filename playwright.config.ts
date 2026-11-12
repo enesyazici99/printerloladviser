@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 // End-to-end tests run against the static export (`npm run build` first),
 // served the same way GitHub Pages serves it.
-//   E2E_BASE_PATH=/lol-advisor  test a sub-path build
+//   E2E_BASE_PATH=/printerloladviser  test a sub-path build
 //   E2E_BASE_URL=https://…/     test an already deployed site instead of the local export
 const basePath = process.env.E2E_BASE_PATH ?? "";
 const port = Number(process.env.E2E_PORT ?? 4173);

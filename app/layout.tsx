@@ -9,14 +9,14 @@ const inter = Inter({ subsets: ["latin", "latin-ext"], variable: "--font-inter",
 
 export const metadata: Metadata = {
   title: {
-    default: "LoL Advisor — Pro Buildler ve Draft Asistanı",
-    template: "%s — LoL Advisor",
+    default: "printerloladviser — Pro Buildler ve Draft Asistanı",
+    template: "%s — printerloladviser",
   },
   description:
     "Challenger ve Grandmaster oyuncularının buildleri, eşya geçmişi, rünleri ve canlı şampiyon seçimi için draft önerileri.",
   keywords: ["League of Legends", "LoL", "pro builds", "probuilds", "draft", "counter pick", "build"],
   openGraph: {
-    title: "LoL Advisor — Pro Buildler ve Draft Asistanı",
+    title: "printerloladviser — Pro Buildler ve Draft Asistanı",
     description: "Challenger buildleri, eşya geçmişi ve canlı draft önerileri.",
     type: "website",
     locale: "tr_TR",

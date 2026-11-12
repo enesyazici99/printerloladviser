@@ -1,11 +1,12 @@
 {
-  "name": "lol-advisor",
+  "name": "printerloladviser",
   "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "data": "node scripts/data/build-data.mjs",
+    "key:push": "node scripts/push-key.mjs",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

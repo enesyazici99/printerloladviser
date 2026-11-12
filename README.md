@@ -1,4 +1,4 @@
-# LoL Advisor
+# printerloladviser
 
 Pro builds and a draft assistant for League of Legends, built only from
 Challenger / Grandmaster solo-queue games (one-trick players are flagged).
@@ -19,7 +19,7 @@ Challenger / Grandmaster solo-queue games (one-trick players are flagged).
 
 Turkish and English UI. The site is a static export; there is no server.
 
-**Live:** https://ygappstudio.com/lol-advisor/
+**Live:** https://ygappstudio.com/printerloladviser/
 
 ## How it works
 
@@ -83,6 +83,6 @@ by hand, or from the local client:
 - **Desktop app (`src-tauri/`)** — a Tauri shell that reads the client's local
   API and loads the published site.
 
-LoL Advisor isn't endorsed by Riot Games and doesn't reflect the views or
+printerloladviser isn't endorsed by Riot Games and doesn't reflect the views or
 opinions of Riot Games or anyone officially involved in producing or managing
 League of Legends.

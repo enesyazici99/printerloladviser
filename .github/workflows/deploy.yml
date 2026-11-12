@@ -1,18 +1,15 @@
-name: Build data and deploy to GitHub Pages
+name: Deploy to GitHub Pages
+
+# Builds the static site from the last data snapshot and publishes it.
+# Runs on every push to main and whenever the data refresh has saved new data.
 
 on:
   push:
     branches: [main]
-  schedule:
-    - cron: "17 */6 * * *" # refresh pro data four times a day
   workflow_dispatch:
-    inputs:
-      max_matches:
-        description: "New matches to collect from the Riot API"
-        default: "1500"
 
 permissions:
-  contents: write # the data snapshot lives on the `data` branch
+  contents: read
   pages: write
   id-token: write
 
@@ -21,13 +18,15 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  NEXT_PUBLIC_BASE_PATH: /lol-advisor
+  # Project pages live under /<repository name>/ on the account's Pages domain.
+  NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
   NEXT_PUBLIC_SITE_ORIGIN: https://ygappstudio.com # this account's Pages custom domain
+  GH_TOKEN: ${{ github.token }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -38,44 +37,9 @@ jobs:
 
       - run: npm ci
 
-      # The generated JSON is not part of the source tree; the last good
-      # snapshot is kept as a single commit on the `data` branch.
+      # The generated JSON is not part of the source tree.
       - name: Restore data snapshot
-        run: |
-          mkdir -p public/data
-          if git fetch --depth=1 origin data; then
-            git archive FETCH_HEAD | tar -x -C public/data
-            echo "restored snapshot: $(ls public/data/champions | wc -l) champion files"
-          else
-            echo "no data branch yet"
-          fi
-
-      # Only scheduled/manual runs talk to the Riot API. If the key is missing
-      # or expired the step fails and the site is deployed with the snapshot.
-      - name: Refresh data from the Riot API
-        id: refresh
-        if: github.event_name != 'push'
-        continue-on-error: true
-        env:
-          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
-        run: node scripts/data/build-data.mjs --max-matches=${{ github.event.inputs.max_matches || '1500' }}
-
-      # A refresh that stopped half-way leaves files from two different moments:
-      # go back to the snapshot so the published data is always consistent.
-      - name: Discard a failed refresh
-        if: steps.refresh.outcome == 'failure'
-        run: |
-          rm -rf public/data && mkdir -p public/data
-          git archive FETCH_HEAD | tar -x -C public/data
-
-      - name: Save data snapshot
-        if: steps.refresh.outcome == 'success'
-        run: |
-          export GIT_INDEX_FILE="$RUNNER_TEMP/data-index"
-          (cd public/data && git --git-dir="$GITHUB_WORKSPACE/.git" --work-tree=. add -A)
-          tree=$(git write-tree)
-          commit=$(git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit-tree "$tree" -m "data snapshot $(date -u +%FT%TZ)")
-          git push --force origin "$commit:refs/heads/data"
+        run: bash scripts/ci/snapshot.sh restore
 
       - name: Check that data exists
         run: test -f public/data/meta.json && test -f public/data/draft.json && test -f public/data/static/en.json
