@@ -178,7 +178,7 @@ export function ChampionPageClient({ championKey }: { championKey: string }) {
         )}
 
         <label className="flex cursor-pointer items-center gap-1.5 text-xs text-fg-secondary">
-          <input type="checkbox" className="accent-[var(--accent)]" checked={filters.winsOnly} onChange={(e) => set({ winsOnly: e.target.checked })} />
+          <input type="checkbox" className="accent-accent" checked={filters.winsOnly} onChange={(e) => set({ winsOnly: e.target.checked })} />
           {t("champ.filters.winsOnly")}
         </label>
 

@@ -1,61 +1,45 @@
 import type { Config } from "tailwindcss";
 
+// Theme colours are RGB channel triplets in CSS variables (app/globals.css), so
+// opacity modifiers such as `bg-surface/90` or `ring-gold/80` work.
+const c = (name: string) => `rgb(var(${name}) / <alpha-value>)`;
+
 const config: Config = {
-  content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
-  darkMode: "class",
+  content: ["./components/**/*.{js,ts,jsx,tsx,mdx}", "./app/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
       colors: {
         surface: {
-          DEFAULT: "var(--surface)",
-          secondary: "var(--surface-secondary)",
-          tertiary: "var(--surface-tertiary)",
+          DEFAULT: c("--surface"),
+          secondary: c("--surface-secondary"),
+          tertiary: c("--surface-tertiary"),
         },
         border: {
-          DEFAULT: "var(--border)",
-          secondary: "var(--border-secondary)",
+          DEFAULT: c("--border"),
+          secondary: c("--border-secondary"),
         },
         accent: {
-          DEFAULT: "var(--accent)",
-          hover: "var(--accent-hover)",
-          muted: "var(--accent-muted)",
+          DEFAULT: c("--accent"),
+          hover: c("--accent-hover"),
+          muted: "rgb(var(--accent) / 0.12)",
         },
         win: {
-          DEFAULT: "var(--win)",
-          bg: "var(--win-bg)",
+          DEFAULT: c("--win"),
+          bg: "rgb(var(--win) / 0.09)",
         },
         loss: {
-          DEFAULT: "var(--loss)",
-          bg: "var(--loss-bg)",
+          DEFAULT: c("--loss"),
+          bg: "rgb(var(--loss) / 0.08)",
         },
         fg: {
-          DEFAULT: "var(--fg)",
-          secondary: "var(--fg-secondary)",
-          muted: "var(--fg-muted)",
+          DEFAULT: c("--fg"),
+          secondary: c("--fg-secondary"),
+          muted: c("--fg-muted"),
         },
-        gold: "var(--gold)",
+        gold: c("--gold"),
       },
       fontFamily: {
         sans: ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
-        mono: ["var(--font-jetbrains)", "JetBrains Mono", "monospace"],
-      },
-      animation: {
-        "fade-in": "fadeIn 0.4s ease both",
-        "slide-up": "slideUp 0.4s ease both",
-      },
-      keyframes: {
-        fadeIn: {
-          "0%": { opacity: "0" },
-          "100%": { opacity: "1" },
-        },
-        slideUp: {
-          "0%": { opacity: "0", transform: "translateY(10px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
-        },
       },
     },
   },

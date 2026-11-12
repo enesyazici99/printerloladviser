@@ -81,6 +81,49 @@ test.describe("home", () => {
     await expect(page.getByTestId("meta-table")).toBeVisible();
   });
 
+  test("header search jumps straight to a champion from any page", async ({ page }) => {
+    await page.goto("meta/");
+    const search = page.getByTestId("header-search");
+    const input = search.getByRole("combobox");
+    await input.fill("ahr");
+    await expect(search.getByRole("option")).toHaveCount(1);
+    await expect(search.getByRole("option").first()).toContainText("Ahri");
+    await input.press("Enter");
+    await expect(page).toHaveURL(/\/champion\/Ahri\/$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Ahri");
+    await expect(input).toHaveValue("");
+
+    // Names starting with the query rank first, arrow keys move, a click opens the champion.
+    await input.fill("vi");
+    await expect(search.getByRole("option").first()).toContainText("Vi");
+    await input.press("ArrowDown");
+    await expect(search.getByRole("option").nth(1)).toHaveAttribute("aria-selected", "true");
+    await search.locator('button[data-champion="Viktor"]').click();
+    await expect(page).toHaveURL(/\/champion\/Viktor\/$/);
+
+    // No match, Escape, and the "/" shortcut.
+    await input.fill("zzzz");
+    await expect(search.getByRole("listbox")).toContainText("Şampiyon bulunamadı");
+    await input.press("Escape");
+    await expect(search.getByRole("listbox")).toHaveCount(0);
+    await page.locator("h1").click();
+    await page.keyboard.press("/");
+    await expect(input).toBeFocused();
+  });
+
+  test("header search opens from a button on phones @mobile", async ({ page, isMobile }) => {
+    test.skip(!isMobile, "phone layout only");
+    await page.goto("draft/");
+    const search = page.locator('[data-testid="header-search"]:visible');
+    await expect(search).toHaveCount(0);
+    await page.getByTestId("mobile-search-toggle").click();
+    await expect(search.getByRole("combobox")).toBeFocused();
+    await search.getByRole("combobox").fill("jinx");
+    await search.locator('button[data-champion="Jinx"]').click();
+    await expect(page).toHaveURL(/\/champion\/Jinx\/$/);
+    await expect(search).toHaveCount(0); // closes after picking
+  });
+
   test("unknown pages show a 404", async ({ page }) => {
     const res = await page.goto("champion/NotAChampion/");
     expect(res?.status()).toBe(404);

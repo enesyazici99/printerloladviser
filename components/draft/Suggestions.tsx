@@ -139,7 +139,7 @@ export function Suggestions({ index }: { index: DraftIndex }) {
               ))}
             </div>
             <label className={clsx("ml-auto flex items-center gap-1.5 text-xs", pool.length ? "cursor-pointer text-fg-secondary" : "text-fg-muted")} title={t("draft.pool.hint")}>
-              <input type="checkbox" className="accent-[var(--accent)]" checked={usePool} disabled={pool.length === 0} onChange={(e) => setOnlyPool(e.target.checked)} data-testid="only-pool" />
+              <input type="checkbox" className="accent-accent" checked={usePool} disabled={pool.length === 0} onChange={(e) => setOnlyPool(e.target.checked)} data-testid="only-pool" />
               {t("draft.onlyPool")} ({pool.length})
             </label>
           </div>

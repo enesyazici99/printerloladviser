@@ -2,23 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Colours are RGB channels so Tailwind can add opacity (see tailwind.config.ts). */
 :root {
-  --surface: #0b0d16;
-  --surface-secondary: #111523;
-  --surface-tertiary: #181d30;
-  --border: #1f2539;
-  --border-secondary: #2a3250;
-  --accent: #4f7df7;
-  --accent-hover: #3d69de;
-  --accent-muted: rgba(79, 125, 247, 0.12);
-  --gold: #c8a04a;
-  --win: #4f8ff7;
-  --win-bg: rgba(79, 143, 247, 0.09);
-  --loss: #e5565f;
-  --loss-bg: rgba(229, 86, 95, 0.08);
-  --fg: #e7eaf2;
-  --fg-secondary: #98a2b8;
-  --fg-muted: #626d87;
+  --surface: 11 13 22; /* #0b0d16 */
+  --surface-secondary: 17 21 35; /* #111523 */
+  --surface-tertiary: 24 29 48; /* #181d30 */
+  --border: 31 37 57; /* #1f2539 */
+  --border-secondary: 42 50 80; /* #2a3250 */
+  --accent: 79 125 247; /* #4f7df7 */
+  --accent-hover: 61 105 222; /* #3d69de */
+  --gold: 200 160 74; /* #c8a04a */
+  --win: 79 143 247; /* #4f8ff7 */
+  --loss: 229 86 95; /* #e5565f */
+  --fg: 231 234 242; /* #e7eaf2 */
+  --fg-secondary: 152 162 184; /* #98a2b8 */
+  --fg-muted: 98 109 135; /* #626d87 */
   color-scheme: dark;
 }
 
@@ -27,8 +25,8 @@ html {
 }
 
 body {
-  background: var(--surface);
-  color: var(--fg);
+  background: rgb(var(--surface));
+  color: rgb(var(--fg));
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }
@@ -38,10 +36,10 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--surface);
+  background: rgb(var(--surface));
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-secondary);
+  background: rgb(var(--border-secondary));
   border-radius: 6px;
 }
 

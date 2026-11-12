@@ -262,24 +262,47 @@ test.describe("draft assistant", () => {
       bans: { myTeamBans: [], theirTeamBans: [] },
     };
 
-    // Stand-in for the folder dialog: a directory with an old log, an unrelated file and the live client log.
+    // Stand-in for the folder dialog. The user picks the game folder (as on a real install:
+    // League of Legends / Logs / LeagueClient Logs); the log folder holds an old log, the
+    // Ux log, the tracing file and the live client log.
     await page.addInitScript(() => {
       const w = window as unknown as { __log: string; showDirectoryPicker: unknown };
       w.__log = "000001.000|   OKAY| rcp-be-lol-login| started\n";
-      w.showDirectoryPicker = async () => ({
+      const missing = async () => {
+        throw new DOMException("not found", "NotFoundError");
+      };
+      const logFolder = {
         async *values() {
-          yield { kind: "file", name: "2026-11-01_LeagueClient.log", getFile: async () => new File(["old"], "a.log", { lastModified: Date.now() - 86_400_000 }) };
-          yield { kind: "file", name: "2026-11-12_LeagueClientUx.log", getFile: async () => new File(["ux"], "b.log", { lastModified: Date.now() }) };
-          yield { kind: "directory", name: "sub" };
-          yield { kind: "file", name: "2026-11-12_LeagueClient.log", getFile: async () => new File([w.__log], "c.log", { lastModified: Date.now() }) };
+          yield { kind: "file", name: "2026-11-01T10-00-00_100_LeagueClient.log", getFile: async () => new File(["old"], "2026-11-01T10-00-00_100_LeagueClient.log", { lastModified: Date.now() - 86_400_000 }) };
+          yield { kind: "file", name: "2026-11-12T12-26-36_200_300_LeagueClientUx.log", getFile: async () => new File(["ux"], "ux.log", { lastModified: Date.now() }) };
+          yield { kind: "file", name: "2026-11-12T12-26-36_200_LeagueClient-tracing.json", getFile: async () => new File(["{}"], "tracing.json", { lastModified: Date.now() }) };
+          yield { kind: "file", name: "2026-11-12T12-26-36_200_LeagueClient.log", getFile: async () => new File([w.__log], "2026-11-12T12-26-36_200_LeagueClient.log", { lastModified: Date.now() }) };
         },
-      });
+        getDirectoryHandle: missing,
+      };
+      const logs = {
+        async *values() {
+          yield { kind: "directory", name: "GameLogs" };
+          yield { kind: "directory", name: "LeagueClient Logs" };
+        },
+        getDirectoryHandle: async (name: string) => (name === "LeagueClient Logs" ? logFolder : missing()),
+      };
+      const game = {
+        async *values() {
+          yield { kind: "directory", name: "Config" };
+          yield { kind: "directory", name: "Logs" };
+          yield { kind: "file", name: "LeagueClient.exe", getFile: async () => new File([""], "LeagueClient.exe") };
+        },
+        getDirectoryHandle: async (name: string) => (name === "Logs" ? logs : missing()),
+      };
+      w.showDirectoryPicker = async () => game;
     });
 
     await page.goto("draft/");
     await page.getByTestId("live-sync").getByRole("button").first().click();
-    await page.getByRole("button", { name: "League log klasörünü bağla" }).click();
+    await page.getByRole("button", { name: "League klasörünü bağla" }).click();
     await expect(page.getByTestId("live-sync-panel")).toContainText("şampiyon seçimi bekleniyor");
+    await expect(page.getByTestId("sync-file")).toHaveText("2026-11-12T12-26-36_200_LeagueClient.log");
 
     // Champion select starts: the client writes the first session.
     await page.evaluate((text) => ((window as unknown as { __log: string }).__log += text), line(base));
@@ -303,6 +326,68 @@ test.describe("draft assistant", () => {
     await page.evaluate((text) => ((window as unknown as { __log: string }).__log += text), line({ ...next, theirTeam: [{ cellId: 5, championId: enemyJungle }, { cellId: 6, championId: top === 1 ? 2 : 1 }] }));
     await page.waitForTimeout(3000);
     await expect(slot(page, "enemy", "jungle")).toHaveAttribute("data-champion", "");
+  });
+
+  test("live sync explains a wrong folder, an unreadable folder and an old lobby", async ({ page, request }) => {
+    const draft = await loadDraft(request);
+    const top = topOfRole(draft, 0, 1)[0];
+    await page.addInitScript(() => {
+      const w = window as unknown as { __mode: string; __log: string; showDirectoryPicker: unknown };
+      w.__mode = "empty";
+      w.__log = "";
+      w.showDirectoryPicker = async () => ({
+        async *values() {
+          if (w.__mode === "broken") throw new DOMException("The requested file could not be read", "NotReadableError");
+          if (w.__mode === "ended") {
+            yield { kind: "file", name: "2026-11-12T12-26-36_1_LeagueClient.log", getFile: async () => new File([w.__log], "2026-11-12T12-26-36_1_LeagueClient.log", { lastModified: Date.now() }) };
+            return;
+          }
+          yield { kind: "file", name: "readme.txt", getFile: async () => new File(["x"], "readme.txt") };
+        },
+        getDirectoryHandle: async () => {
+          throw new DOMException("not found", "NotFoundError");
+        },
+      });
+    });
+    await page.goto("draft/");
+    await page.getByTestId("live-sync").getByRole("button").first().click();
+
+    // A folder that is not the game folder: the panel says what to choose instead of waiting forever.
+    await page.getByRole("button", { name: "League klasörünü bağla" }).click();
+    await expect(page.getByTestId("sync-nolog")).toContainText("League of Legends");
+    await page.getByRole("button", { name: "Durdur" }).click();
+
+    // A folder the browser cannot read: the reason is shown and connecting is offered again.
+    await page.evaluate(() => ((window as unknown as { __mode: string }).__mode = "broken"));
+    await page.getByRole("button", { name: "League klasörünü bağla" }).click();
+    await expect(page.getByTestId("sync-error")).toContainText("could not be read");
+    await expect(page.getByRole("button", { name: "League klasörünü bağla" })).toBeVisible();
+
+    // A hand-picked log whose champion select ended long ago: loaded, but marked as over.
+    const session = { localPlayerCellId: 0, myTeam: [{ cellId: 0, championId: top, assignedPosition: "top" }], theirTeam: [], actions: [], bans: {} };
+    const sessionLine = `000557.706|   OKAY|    rcp-be-lol-champ-select| /lol-champ-select/v1/session: ${JSON.stringify(session)}\n`;
+    await page.getByTestId("log-file-input").setInputFiles({ name: "2026-11-11T23-03-13_1_LeagueClient.log", mimeType: "text/plain", buffer: Buffer.from(`${sessionLine}009900.000|   OKAY| rcp-be-lol-gameflow| much later\n`) });
+    await expect(page.getByTestId("sync-old")).toBeVisible();
+    await expect(slot(page, "ally", "top")).toHaveAttribute("data-champion", String(top));
+
+    // Connecting the folder during the game that followed (lobby ended ten minutes ago):
+    // the draft of that game is loaded for build advice, marked as over.
+    await page.getByTestId("reset").click();
+    await page.evaluate((log) => {
+      const w = window as unknown as { __mode: string; __log: string };
+      w.__mode = "ended";
+      w.__log = log;
+    }, `${sessionLine}001160.000|   OKAY| rcp-be-lol-gameflow| in game\n`);
+    await page.getByRole("button", { name: "League klasörünü bağla" }).click();
+    await expect(page.getByTestId("sync-old")).toBeVisible();
+    await expect(slot(page, "ally", "top")).toHaveAttribute("data-champion", String(top));
+    // …while a lobby from hours ago is ignored.
+    await page.getByTestId("reset").click();
+    await page.getByRole("button", { name: "Durdur" }).click();
+    await page.evaluate((log) => ((window as unknown as { __log: string }).__log = log), `${sessionLine}020000.000|   OKAY| rcp-be-lol-gameflow| hours later\n`);
+    await page.getByRole("button", { name: "League klasörünü bağla" }).click();
+    await expect(page.getByTestId("live-sync-panel")).toContainText("şampiyon seçimi bekleniyor");
+    await expect(slot(page, "ally", "top")).toHaveAttribute("data-champion", "");
   });
 
   test("the build follows the lane opponent", async ({ page, request }) => {

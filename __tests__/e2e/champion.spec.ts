@@ -105,7 +105,7 @@ test.describe("champion pro builds", () => {
     const detail = row.getByTestId("match-detail");
 
     // Rune page: the chosen runes are highlighted (4 primary + 2 secondary)
-    await expect(detail.getByTestId("rune-page").locator("img.ring-1")).toHaveCount(6);
+    await expect(detail.getByTestId("rune-page").locator('[data-selected="1"]')).toHaveCount(6);
 
     // Completed items in purchase order
     const completed = detail.getByTestId("completed-items").locator("img");
