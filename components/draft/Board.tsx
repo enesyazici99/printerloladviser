@@ -11,16 +11,26 @@ export type PickerTarget = { kind: "pick"; side: Side; role: number } | { kind: 
 function Slot({ side, role, onOpen }: { side: Side; role: number; onOpen: (t: PickerTarget) => void }) {
   const { t, data, roleName } = useI18n();
   const champ = useDraft((s) => s[side][role]);
+  // Shown by a synced client but not locked in: displayed faded, never counted as a pick.
+  const hover = useDraft((s) => (side === "ally" ? s.allyHover : s.enemyHover)[role]);
   const myRole = useDraft((s) => s.myRole);
   const clearPick = useDraft((s) => s.clearPick);
+  const setPick = useDraft((s) => s.setPick);
   const setMyRole = useDraft((s) => s.setMyRole);
   const mine = side === "ally" && role === myRole;
-  const name = champ ? data?.champions[champ]?.name : null;
+  const shown = champ || hover;
+  const hovering = !champ && hover > 0;
+  const name = shown ? data?.champions[shown]?.name : null;
   return (
     <div
-      className={clsx("flex items-center gap-1 rounded-md border px-1.5 py-1.5 sm:gap-2 sm:px-2", mine ? "border-accent bg-accent-muted" : "border-border bg-surface-tertiary/50", side === "enemy" && "flex-row-reverse text-right")}
+      className={clsx(
+        "flex items-center gap-1 rounded-md border px-1.5 py-1.5 sm:gap-2 sm:px-2",
+        mine ? "border-accent bg-accent-muted" : hovering ? "border-dashed border-border-secondary bg-surface-tertiary/30" : "border-border bg-surface-tertiary/50",
+        side === "enemy" && "flex-row-reverse text-right"
+      )}
       data-testid={`slot-${side}-${ROLES[role]}`}
       data-champion={champ || ""}
+      data-hover={hovering ? hover : ""}
     >
       {side === "ally" ? (
         <button
@@ -43,18 +53,34 @@ function Slot({ side, role, onOpen }: { side: Side; role: number; onOpen: (t: Pi
         type="button"
         onClick={() => onOpen({ kind: "pick", side, role })}
         className={clsx("flex min-w-0 flex-1 items-center gap-2 rounded text-left hover:opacity-90", side === "enemy" && "flex-row-reverse text-right")}
-        aria-label={`${side === "ally" ? t("draft.ally") : t("draft.enemy")} ${roleName(ROLES[role])}: ${name ?? t("draft.empty")}`}
+        aria-label={`${side === "ally" ? t("draft.ally") : t("draft.enemy")} ${roleName(ROLES[role])}: ${name ?? t("draft.empty")}${hovering ? ` (${t("draft.hover")})` : ""}`}
       >
-        {champ ? <ChampionIcon id={champ} size={40} /> : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-dashed border-border-secondary text-lg text-fg-muted">+</span>}
+        {shown ? (
+          <ChampionIcon id={shown} size={40} className={hovering ? "opacity-45 grayscale-[60%]" : undefined} />
+        ) : (
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-dashed border-border-secondary text-lg text-fg-muted">+</span>
+        )}
         <span className="min-w-0 flex-1">
-          <span className={clsx("line-clamp-2 break-words text-[13px] font-semibold leading-tight sm:text-sm", champ ? "text-fg" : "text-fg-muted")}>{name ?? t("draft.pick")}</span>
+          <span className={clsx("line-clamp-2 break-words text-[13px] font-semibold leading-tight sm:text-sm", champ ? "text-fg" : hovering ? "text-fg-secondary" : "text-fg-muted")}>{name ?? t("draft.pick")}</span>
           <span className="block text-[11px] text-fg-muted">
-            {roleName(ROLES[role])}
+            {hovering ? <span className="text-gold">{t("draft.hover")}</span> : roleName(ROLES[role])}
             {mine && ` · ${t("draft.myRole")}`}
           </span>
         </span>
       </button>
-      {champ > 0 && (
+      {hovering && (
+        <button
+          type="button"
+          onClick={() => setPick(side, role, hover)}
+          className="rounded border border-border px-1 text-[11px] text-fg-secondary hover:border-accent hover:text-fg"
+          title={t("draft.hover.accept")}
+          aria-label={`${t("draft.hover.accept")}: ${name}`}
+          data-testid={`accept-hover-${side}-${ROLES[role]}`}
+        >
+          ✓
+        </button>
+      )}
+      {shown > 0 && (
         <button type="button" onClick={() => clearPick(side, role)} className="px-0.5 text-xs text-fg-muted hover:text-loss sm:px-1 sm:text-sm" aria-label={`${t("common.clear")} ${name}`}>
           ✕
         </button>

@@ -42,6 +42,7 @@ export function LiveSync({ index }: { index: DraftIndex | null }) {
   const [open, setOpen] = useState(false);
   const [connected, setConnected] = useState(false);
   const dirRef = useRef<LogDirectory | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
   const lastApplied = useRef("");
   const indexRef = useRef(index);
   indexRef.current = index;
@@ -50,6 +51,16 @@ export function LiveSync({ index }: { index: DraftIndex | null }) {
     setCanPickFolder("showDirectoryPicker" in window);
     setDesktop(isTauri());
   }, []);
+
+  // The panel floats over the page: clicking anywhere else puts it away (syncing continues).
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
 
   /** Applies a session once; repeated identical sessions do not overwrite manual edits. */
   const applySession = useCallback(
@@ -164,7 +175,7 @@ export function LiveSync({ index }: { index: DraftIndex | null }) {
   }
 
   return (
-    <div className="relative" data-testid="live-sync">
+    <div ref={boxRef} className="relative" data-testid="live-sync">
       <button type="button" className={clsx("btn", connected && "btn-active")} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className={clsx("h-2 w-2 rounded-full", dot)} />
         {t("draft.sync")}

@@ -27,7 +27,13 @@ export const session = (over: Partial<ChampSelectSession> = {}): ChampSelectSess
       { actorCellId: 5, championId: 92, completed: true, type: "ban", isAllyAction: false },
       { actorCellId: 1, championId: 89, completed: false, type: "ban", isAllyAction: true },
     ],
+    // Malphite (ally top), Jinx and Ahri (enemies) are locked; the ally bot laner is still choosing Caitlyn.
     [{ actorCellId: 0, championId: 54, completed: true, type: "pick", isAllyAction: true }],
+    [
+      { actorCellId: 5, championId: 222, completed: true, type: "pick", isAllyAction: false },
+      { actorCellId: 6, championId: 103, completed: true, type: "pick", isAllyAction: false },
+    ],
+    [{ actorCellId: 3, championId: 51, completed: false, type: "pick", isAllyAction: true }],
   ],
   bans: { myTeamBans: [], theirTeamBans: [] },
   timer: { phase: "BAN_PICK" },
@@ -138,8 +144,34 @@ describe("finding the client log", () => {
 
 describe("sessionToBoard", () => {
   const board = sessionToBoard(session(), index);
-  it("places allies by their assigned position and shows hover intent", () => {
-    expect(board.ally).toEqual([54, 64, 0, 51, 0]);
+  it("counts only locked-in champions as picks", () => {
+    expect(board.ally).toEqual([54, 0, 0, 0, 0]);
+  });
+  it("keeps declared intents and unlocked selections apart as hovers", () => {
+    // jungle declared Lee Sin before their turn; bot is on Caitlyn but has not locked
+    expect(board.allyHover).toEqual([0, 64, 0, 51, 0]);
+    expect(board.enemyHover).toEqual([0, 0, 0, 0, 0]);
+  });
+  it("turns a hover into a pick when the player locks in", () => {
+    const s = session();
+    s.actions![3][0].completed = true;
+    const b = sessionToBoard(s, index);
+    expect(b.ally).toEqual([54, 0, 0, 51, 0]);
+    expect(b.allyHover).toEqual([0, 64, 0, 0, 0]);
+  });
+  it("treats an enemy who is still choosing as a hover in a guessed role", () => {
+    const s = session();
+    s.theirTeam[2] = { cellId: 7, championId: 412 }; // Thresh shown, not locked
+    s.actions!.push([{ actorCellId: 7, championId: 412, completed: false, type: "pick", isAllyAction: false }]);
+    const b = sessionToBoard(s, index);
+    expect(b.enemy).toEqual([0, 0, 103, 222, 0]);
+    expect(b.enemyHover).toEqual([0, 0, 0, 0, 412]);
+  });
+  it("takes shown champions as picks when the session has no pick actions to go by", () => {
+    const b = sessionToBoard(session({ actions: [] }), index);
+    expect(b.ally).toEqual([54, 0, 0, 51, 0]);
+    expect(b.allyHover).toEqual([0, 64, 0, 0, 0]); // an intent is still only an intent
+    expect(b.enemy).toEqual([0, 0, 103, 222, 0]);
   });
   it("finds the local player's role", () => {
     expect(board.myRole).toBe(2);
@@ -157,6 +189,7 @@ describe("sessionToBoard", () => {
   it("works for blind lobbies without positions", () => {
     const s = session({
       localPlayerCellId: 0,
+      actions: [],
       myTeam: [
         { cellId: 0, championId: 103, assignedPosition: "" },
         { cellId: 1, championId: 64, assignedPosition: "" },

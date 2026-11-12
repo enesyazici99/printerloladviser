@@ -94,8 +94,16 @@ export function parseSessionFromLog(text: string): ChampSelectSession | null {
 }
 
 export interface BoardState {
+  /** locked-in picks */
   ally: Team;
   enemy: Team;
+  /**
+   * Champions that are only being shown: a declared intent before the player's
+   * turn, or a selection that has not been locked yet. They are displayed but
+   * never treated as picks.
+   */
+  allyHover: Team;
+  enemyHover: Team;
   bans: number[];
   /** role index of the local player (null when the client did not assign one) */
   myRole: number | null;
@@ -103,18 +111,16 @@ export interface BoardState {
 
 /** Translate a client session into the draft board. */
 export function sessionToBoard(session: ChampSelectSession, index: DraftIndex | null): BoardState {
-  const ally: Team = [0, 0, 0, 0, 0];
-  const unplaced: number[] = [];
-  let myRole: number | null = null;
-  for (const p of session.myTeam) {
-    const champ = p.championId || p.championPickIntent || 0;
-    const role = POSITION_ROLE[(p.assignedPosition ?? "").toLowerCase()];
-    if (p.cellId === session.localPlayerCellId && role != null) myRole = role;
-    if (!champ) continue;
-    if (role != null && !ally[role]) ally[role] = champ;
-    else unplaced.push(champ);
-  }
-  const enemyChamps = session.theirTeam.map((p) => p.championId).filter((c) => c > 0);
+  // A pick is final once its "pick" action is completed. Until then the client
+  // already puts the hovered champion into `championId`, which is not a pick.
+  const actions = (session.actions ?? []).flat();
+  const hasPickActions = actions.some((a) => a.type === "pick");
+  const lockedBy = new Map<number, number>();
+  for (const a of actions) if (a.type === "pick" && a.completed && a.championId > 0) lockedBy.set(a.actorCellId, a.championId);
+  // Sessions without pick actions (some custom modes) give no way to tell: take `championId` as picked.
+  const lockedOf = (p: SessionPlayer) => (hasPickActions ? (lockedBy.get(p.cellId) ?? 0) : p.championId || 0);
+  const shownOf = (p: SessionPlayer) => (lockedOf(p) ? 0 : p.championId || p.championPickIntent || 0);
+
   const placeLoose = (team: Team, champs: number[]): Team => {
     if (champs.length === 0) return team;
     if (index) return assignRoles(index, champs, team);
@@ -126,18 +132,33 @@ export function sessionToBoard(session: ChampSelectSession, index: DraftIndex | 
     return out;
   };
 
+  // Allies have assigned positions in ranked; without them the role is guessed for locked picks only.
+  const ally: Team = [0, 0, 0, 0, 0];
+  const allyHover: Team = [0, 0, 0, 0, 0];
+  const unplaced: number[] = [];
+  let myRole: number | null = null;
+  for (const p of session.myTeam) {
+    const role = POSITION_ROLE[(p.assignedPosition ?? "").toLowerCase()];
+    if (p.cellId === session.localPlayerCellId && role != null) myRole = role;
+    const locked = lockedOf(p);
+    if (locked) {
+      if (role != null && !ally[role]) ally[role] = locked;
+      else unplaced.push(locked);
+    } else if (role != null && shownOf(p)) allyHover[role] = shownOf(p);
+  }
+  const allyTeam = placeLoose(ally, unplaced);
+  for (let r = 0; r < allyHover.length; r++) if (allyTeam[r]) allyHover[r] = 0;
+
+  // Enemy positions are hidden: guess them from how the champions are played.
+  const enemyTeam = placeLoose([0, 0, 0, 0, 0], session.theirTeam.map(lockedOf).filter((c) => c > 0));
+  const enemyShown = session.theirTeam.map(shownOf).filter((c) => c > 0 && !enemyTeam.includes(c));
+  const enemyHover = placeLoose(enemyTeam, enemyShown).map((c, r) => (enemyTeam[r] ? 0 : c));
+
   const bans = new Set<number>();
   for (const id of [...(session.bans?.myTeamBans ?? []), ...(session.bans?.theirTeamBans ?? [])]) if (id > 0) bans.add(id);
-  for (const set of session.actions ?? []) {
-    for (const a of set) if (a.type === "ban" && a.completed && a.championId > 0) bans.add(a.championId);
-  }
+  for (const a of actions) if (a.type === "ban" && a.completed && a.championId > 0) bans.add(a.championId);
 
-  return {
-    ally: placeLoose(ally, unplaced),
-    enemy: placeLoose([0, 0, 0, 0, 0], enemyChamps),
-    bans: [...bans],
-    myRole,
-  };
+  return { ally: allyTeam, enemy: enemyTeam, allyHover, enemyHover, bans: [...bans], myRole };
 }
 
 /** The parts of the File System Access API this module uses (kept minimal so it can be faked in tests). */

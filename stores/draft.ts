@@ -13,6 +13,9 @@ export const MAX_BANS = 10;
 interface DraftState {
   ally: Team;
   enemy: Team;
+  /** champions a synced client shows as hovered / intended but not locked; never counted as picks */
+  allyHover: Team;
+  enemyHover: Team;
   bans: number[];
   /** role index of the user */
   myRole: number;
@@ -41,6 +44,8 @@ export const useDraft = create<DraftState>()(
     (set) => ({
       ally: EMPTY,
       enemy: EMPTY,
+      allyHover: EMPTY,
+      enemyHover: EMPTY,
       bans: [],
       myRole: 2,
       risk: "normal",
@@ -51,13 +56,19 @@ export const useDraft = create<DraftState>()(
           const ally = without(s.ally, champ);
           const enemy = without(s.enemy, champ);
           (side === "ally" ? ally : enemy)[role] = champ;
-          return { ally, enemy, bans: s.bans.filter((b) => b !== champ) };
+          // A slot that now holds a pick no longer shows a hover, and the champion is not hovered elsewhere.
+          const allyHover = without(s.allyHover, champ);
+          const enemyHover = without(s.enemyHover, champ);
+          (side === "ally" ? allyHover : enemyHover)[role] = 0;
+          return { ally, enemy, allyHover, enemyHover, bans: s.bans.filter((b) => b !== champ) };
         }),
       clearPick: (side, role) =>
         set((s) => {
           const team = [...s[side]];
+          const hover = [...(side === "ally" ? s.allyHover : s.enemyHover)];
           team[role] = 0;
-          return side === "ally" ? { ally: team } : { enemy: team };
+          hover[role] = 0;
+          return side === "ally" ? { ally: team, allyHover: hover } : { enemy: team, enemyHover: hover };
         }),
       addBan: (champ) =>
         set((s) => (s.bans.includes(champ) || s.bans.length >= MAX_BANS ? s : { bans: [...s.bans, champ], ally: without(s.ally, champ), enemy: without(s.enemy, champ) })),
@@ -70,10 +81,12 @@ export const useDraft = create<DraftState>()(
         set((s) => ({
           ally: board.ally ?? s.ally,
           enemy: board.enemy ?? s.enemy,
+          allyHover: board.allyHover ?? EMPTY,
+          enemyHover: board.enemyHover ?? EMPTY,
           bans: board.bans ?? s.bans,
           myRole: board.myRole ?? s.myRole,
         })),
-      reset: () => set({ ally: EMPTY, enemy: EMPTY, bans: [] }),
+      reset: () => set({ ally: EMPTY, enemy: EMPTY, allyHover: EMPTY, enemyHover: EMPTY, bans: [] }),
     }),
     {
       name: "lol-advisor-draft",

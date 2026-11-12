@@ -234,7 +234,9 @@ test.describe("draft assistant", () => {
     await page.getByTestId("log-file-input").setInputFiles({ name: "2026-11-12T10-00-00_1234_LeagueClient.log", mimeType: "text/plain", buffer: Buffer.from(log) });
     await expect(page.getByTestId("sync-live")).toBeVisible();
     await expect(slot(page, "ally", "top")).toHaveAttribute("data-champion", String(top));
-    await expect(slot(page, "ally", "mid")).toHaveAttribute("data-champion", String(mid)); // hover intent
+    // A declared intent is shown, but it is not a pick.
+    await expect(slot(page, "ally", "mid")).toHaveAttribute("data-hover", String(mid));
+    await expect(slot(page, "ally", "mid")).toHaveAttribute("data-champion", "");
     await expect(slot(page, "enemy", "adc")).toHaveAttribute("data-champion", String(adc[1])); // role guessed from play rates
     await expect(page.getByTestId("bans").locator(`[data-ban="${banned}"]`)).toBeVisible();
     await expect(page.getByTestId("my-role-adc")).toHaveAttribute("aria-pressed", "true"); // local player's position
@@ -244,6 +246,69 @@ test.describe("draft assistant", () => {
     await page.getByTestId("log-file-input").setInputFiles({ name: "LeagueClient.log", mimeType: "text/plain", buffer: Buffer.from("000001.000|   OKAY| rcp-be-lol-login| nothing here\n") });
     await expect(page.getByTestId("sync-none")).toBeVisible();
     await expect(slot(page, "ally", "top")).toHaveAttribute("data-champion", String(top));
+  });
+
+  test("live sync shows hovered champions without treating them as picks", async ({ page, request }) => {
+    const [draft, stat] = await Promise.all([loadDraft(request), loadStatic(request)]);
+    const top = topOfRole(draft, 0, 1)[0];
+    const [mid, otherMid] = topOfRole(draft, 2, 3).filter((id) => id !== top);
+    const [adc, enemyAdc] = topOfRole(draft, 3, 4).filter((id) => ![top, mid, otherMid].includes(id));
+    // Shaped like a real ranked session: every pick has an action; only completed ones are locked.
+    const session = (midLocked: boolean) => ({
+      localPlayerCellId: 2,
+      myTeam: [
+        { cellId: 0, championId: top, championPickIntent: 0, assignedPosition: "top" },
+        { cellId: 1, championId: 0, championPickIntent: 0, assignedPosition: "jungle" },
+        { cellId: 2, championId: mid, championPickIntent: 0, assignedPosition: "middle" }, // me: selected, not locked yet
+        { cellId: 3, championId: 0, championPickIntent: adc, assignedPosition: "bottom" }, // teammate declaring an intent
+        { cellId: 4, championId: 0, championPickIntent: 0, assignedPosition: "utility" },
+      ],
+      theirTeam: [{ cellId: 5, championId: enemyAdc, assignedPosition: "" }],
+      actions: [
+        [{ actorCellId: 0, championId: top, completed: true, type: "pick", isAllyAction: true }],
+        [{ actorCellId: 5, championId: enemyAdc, completed: false, type: "pick", isAllyAction: false }], // enemy still choosing
+        [{ actorCellId: 2, championId: mid, completed: midLocked, type: "pick", isAllyAction: true }],
+        [{ actorCellId: 3, championId: 0, completed: false, type: "pick", isAllyAction: true }],
+      ],
+      bans: { myTeamBans: [], theirTeamBans: [] },
+    });
+    const logOf = (s: object) => Buffer.from(`000557.706|   OKAY|    rcp-be-lol-champ-select| /lol-champ-select/v1/session: ${JSON.stringify(s)}\n`);
+
+    await page.goto("draft/");
+    await page.getByTestId("live-sync").getByRole("button").first().click();
+    await page.getByTestId("log-file-input").setInputFiles({ name: "a_LeagueClient.log", mimeType: "text/plain", buffer: logOf(session(false)) });
+    await expect(page.getByTestId("sync-live")).toBeVisible();
+
+    // Only the locked pick is on the board as a pick.
+    await expect(slot(page, "ally", "top")).toHaveAttribute("data-champion", String(top));
+    for (const [side, role, id] of [["ally", "mid", mid], ["ally", "adc", adc], ["enemy", "adc", enemyAdc]] as const) {
+      await expect(slot(page, side, role)).toHaveAttribute("data-champion", "");
+      await expect(slot(page, side, role)).toHaveAttribute("data-hover", String(id));
+      await expect(slot(page, side, role)).toContainText("kilitlemedi");
+    }
+    // Hovered champions do not count: they are not in the shared link and can still be suggested.
+    expect(new URL(page.url()).searchParams.get("a")).toBe(`${top}....`);
+    expect(new URL(page.url()).searchParams.get("e")).toBeNull();
+    await page.getByRole("heading", { level: 1 }).click(); // clicking elsewhere closes the sync panel
+    await expect(page.getByTestId("live-sync-panel")).toHaveCount(0);
+    await page.getByTestId("suggest-role-adc").click();
+    await expect(page.locator(`[data-testid="suggestion"][data-champion="${top}"]`)).toHaveCount(0);
+    // …but the build is already shown for the champion the player is hovering.
+    await expect(page.getByTestId("build-panel")).toHaveAttribute("data-champion", String(mid));
+
+    // The player locks in: the hover becomes a pick.
+    await page.getByTestId("live-sync").getByRole("button").first().click();
+    await page.getByTestId("log-file-input").setInputFiles({ name: "a_LeagueClient.log", mimeType: "text/plain", buffer: logOf(session(true)) });
+    await expect(slot(page, "ally", "mid")).toHaveAttribute("data-champion", String(mid));
+    await expect(slot(page, "ally", "mid")).toHaveAttribute("data-hover", "");
+
+    // A hover can be counted as a pick by hand (what-if), or dismissed.
+    await page.getByRole("heading", { level: 1 }).click();
+    await page.getByTestId("accept-hover-enemy-adc").click();
+    await expect(slot(page, "enemy", "adc")).toHaveAttribute("data-champion", String(enemyAdc));
+    await slot(page, "ally", "adc").getByRole("button", { name: /Temizle/ }).click();
+    await expect(slot(page, "ally", "adc")).toHaveAttribute("data-hover", "");
+    expect(stat.champions[mid]).toBeTruthy();
   });
 
   test("live sync keeps following a connected log folder", async ({ page, request }) => {
@@ -314,14 +379,15 @@ test.describe("draft assistant", () => {
     const next = { ...base, myTeam: [base.myTeam[0], { cellId: 1, championId: 0, championPickIntent: jungle, assignedPosition: "jungle" }], theirTeam: [{ cellId: 5, championId: enemyJungle }] };
     await page.evaluate((text) => ((window as unknown as { __log: string }).__log += text), line(next));
     await expect(slot(page, "enemy", "jungle")).toHaveAttribute("data-champion", String(enemyJungle), { timeout: 8000 });
-    await expect(slot(page, "ally", "jungle")).toHaveAttribute("data-champion", String(jungle));
+    await expect(slot(page, "ally", "jungle")).toHaveAttribute("data-hover", String(jungle));
 
     // A manual change is not overwritten while the log stays the same.
     await slot(page, "enemy", "jungle").getByRole("button", { name: /Temizle/ }).click();
     await page.waitForTimeout(4500);
     await expect(slot(page, "enemy", "jungle")).toHaveAttribute("data-champion", "");
 
-    // After stopping, new log lines are ignored.
+    // After stopping, new log lines are ignored. (Working on the board closed the panel; syncing went on.)
+    await page.getByTestId("live-sync").getByRole("button").first().click();
     await page.getByRole("button", { name: "Durdur" }).click();
     await page.evaluate((text) => ((window as unknown as { __log: string }).__log += text), line({ ...next, theirTeam: [{ cellId: 5, championId: enemyJungle }, { cellId: 6, championId: top === 1 ? 2 : 1 }] }));
     await page.waitForTimeout(3000);
@@ -372,18 +438,21 @@ test.describe("draft assistant", () => {
 
     // Connecting the folder during the game that followed (lobby ended ten minutes ago):
     // the draft of that game is loaded for build advice, marked as over.
-    await page.getByTestId("reset").click();
+    const openPanel = () => page.getByTestId("live-sync").getByRole("button").first().click();
+    await page.getByTestId("reset").click(); // a click outside closes the panel
     await page.evaluate((log) => {
       const w = window as unknown as { __mode: string; __log: string };
       w.__mode = "ended";
       w.__log = log;
     }, `${sessionLine}001160.000|   OKAY| rcp-be-lol-gameflow| in game\n`);
+    await openPanel();
     await page.getByRole("button", { name: "League klasörünü bağla" }).click();
     await expect(page.getByTestId("sync-old")).toBeVisible();
     await expect(slot(page, "ally", "top")).toHaveAttribute("data-champion", String(top));
     // …while a lobby from hours ago is ignored.
-    await page.getByTestId("reset").click();
     await page.getByRole("button", { name: "Durdur" }).click();
+    await page.getByTestId("reset").click();
+    await openPanel();
     await page.evaluate((log) => ((window as unknown as { __log: string }).__log = log), `${sessionLine}020000.000|   OKAY| rcp-be-lol-gameflow| hours later\n`);
     await page.getByRole("button", { name: "League klasörünü bağla" }).click();
     await expect(page.getByTestId("live-sync-panel")).toContainText("şampiyon seçimi bekleniyor");

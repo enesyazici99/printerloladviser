@@ -38,7 +38,7 @@ function RuneRow({ runes, chosen, cell, keystone }: { runes: StaticRune[]; chose
         return (
           <span key={rune.id} data-selected={picked ? "1" : undefined} className="flex items-center justify-center" style={{ width: cell, height: cell }}>
             {picked ? (
-              <span className="rounded-full bg-black/50 ring-2 ring-gold shadow-[0_0_10px_rgb(var(--gold)/0.35)]">
+              <span className="flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-black/50 ring-2 ring-gold shadow-[0_0_10px_rgb(var(--gold)/0.35)]" style={{ width: on, height: on }}>
                 <RuneIcon id={rune.id} size={on} className="block" />
               </span>
             ) : (
@@ -68,11 +68,11 @@ function Shards({ chosen, size }: { chosen: number[]; size: number }) {
           <div key={i} className="flex items-center justify-around">
             {options.map((id) =>
               id === chosen[i] ? (
-                <span key={id} className="rounded-full ring-2 ring-gold" data-shard-selected="1">
+                <span key={id} className="flex shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-gold" style={{ width: size, height: size }} data-shard-selected="1">
                   <ShardIcon id={id} size={size} />
                 </span>
               ) : (
-                <span key={id} className="opacity-35 grayscale">
+                <span key={id} className="flex shrink-0 items-center justify-center overflow-hidden rounded-full opacity-35 grayscale" style={{ width: size, height: size }}>
                   <ShardIcon id={id} size={size} />
                 </span>
               )

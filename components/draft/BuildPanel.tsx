@@ -28,7 +28,8 @@ export function BuildPanel({ currentPatch }: { currentPatch: string }) {
   const ally = useDraft((s) => s.ally);
   const enemy = useDraft((s) => s.enemy);
   const myRole = useDraft((s) => s.myRole);
-  const champId = ally[myRole];
+  const myHover = useDraft((s) => s.allyHover[myRole]);
+  const champId = ally[myRole] || myHover;
   const champ = champId ? data?.champions[champId] : null;
   const { data: file, isLoading } = useChampionFile(champ?.key);
 

@@ -151,7 +151,7 @@ export function ShardIcon({ id, size = 18 }: { id: number; size?: number }) {
   const s = data?.shards[id];
   const style = { width: size, height: size };
   if (!s) return <span style={style} className="inline-block rounded-full bg-surface-tertiary" />;
-  return <img src={s.icon} alt={s.name} title={s.name} width={size} height={size} loading="lazy" style={style} className="inline-block rounded-full border border-border bg-surface" />;
+  return <img src={s.icon} alt={s.name} title={s.name} width={size} height={size} loading="lazy" style={style} className="block rounded-full bg-surface" />;
 }
 
 export function Spinner({ label }: { label?: string }) {
