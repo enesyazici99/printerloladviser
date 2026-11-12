@@ -2,7 +2,7 @@
   "identifier": "remote-lcu",
   "description": "Capability for remote URL (GitHub Pages) to access LCU commands",
   "remote": {
-    "urls": ["https://enesyazici99.github.io/lol-advisor/*"]
+    "urls": ["https://ygappstudio.com/lol-advisor/*"]
   },
   "permissions": [
     "core:default",

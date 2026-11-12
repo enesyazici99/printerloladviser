@@ -22,6 +22,7 @@ concurrency:
 
 env:
   NEXT_PUBLIC_BASE_PATH: /lol-advisor
+  NEXT_PUBLIC_SITE_ORIGIN: https://ygappstudio.com # this account's Pages custom domain
 
 jobs:
   build:
@@ -59,11 +60,19 @@ jobs:
           RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
         run: node scripts/data/build-data.mjs --max-matches=${{ github.event.inputs.max_matches || '1500' }}
 
+      # A refresh that stopped half-way leaves files from two different moments:
+      # go back to the snapshot so the published data is always consistent.
+      - name: Discard a failed refresh
+        if: steps.refresh.outcome == 'failure'
+        run: |
+          rm -rf public/data && mkdir -p public/data
+          git archive FETCH_HEAD | tar -x -C public/data
+
       - name: Save data snapshot
         if: steps.refresh.outcome == 'success'
         run: |
           export GIT_INDEX_FILE="$RUNNER_TEMP/data-index"
-          git --work-tree=public/data add -A
+          (cd public/data && git --git-dir="$GITHUB_WORKSPACE/.git" --work-tree=. add -A)
           tree=$(git write-tree)
           commit=$(git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit-tree "$tree" -m "data snapshot $(date -u +%FT%TZ)")
           git push --force origin "$commit:refs/heads/data"

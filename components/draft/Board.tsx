@@ -18,7 +18,7 @@ function Slot({ side, role, onOpen }: { side: Side; role: number; onOpen: (t: Pi
   const name = champ ? data?.champions[champ]?.name : null;
   return (
     <div
-      className={clsx("flex items-center gap-2 rounded-md border px-2 py-1.5", mine ? "border-accent bg-accent-muted" : "border-border bg-surface-tertiary/50", side === "enemy" && "flex-row-reverse text-right")}
+      className={clsx("flex items-center gap-1 rounded-md border px-1.5 py-1.5 sm:gap-2 sm:px-2", mine ? "border-accent bg-accent-muted" : "border-border bg-surface-tertiary/50", side === "enemy" && "flex-row-reverse text-right")}
       data-testid={`slot-${side}-${ROLES[role]}`}
       data-champion={champ || ""}
     >
@@ -47,7 +47,7 @@ function Slot({ side, role, onOpen }: { side: Side; role: number; onOpen: (t: Pi
       >
         {champ ? <ChampionIcon id={champ} size={40} /> : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-dashed border-border-secondary text-lg text-fg-muted">+</span>}
         <span className="min-w-0 flex-1">
-          <span className={clsx("block truncate text-sm font-semibold", champ ? "text-fg" : "text-fg-muted")}>{name ?? t("draft.pick")}</span>
+          <span className={clsx("line-clamp-2 break-words text-[13px] font-semibold leading-tight sm:text-sm", champ ? "text-fg" : "text-fg-muted")}>{name ?? t("draft.pick")}</span>
           <span className="block text-[11px] text-fg-muted">
             {roleName(ROLES[role])}
             {mine && ` · ${t("draft.myRole")}`}
@@ -55,7 +55,7 @@ function Slot({ side, role, onOpen }: { side: Side; role: number; onOpen: (t: Pi
         </span>
       </button>
       {champ > 0 && (
-        <button type="button" onClick={() => clearPick(side, role)} className="px-1 text-fg-muted hover:text-loss" aria-label={`${t("common.clear")} ${name}`}>
+        <button type="button" onClick={() => clearPick(side, role)} className="px-0.5 text-xs text-fg-muted hover:text-loss sm:px-1 sm:text-sm" aria-label={`${t("common.clear")} ${name}`}>
           ✕
         </button>
       )}
