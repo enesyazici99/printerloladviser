@@ -3,7 +3,7 @@
 # attached to the "data-snapshot" release. A release asset is replaced in
 # place, so frequent large snapshots do not grow the git repository.
 #
-#   scripts/ci/snapshot.sh restore   # public/data <- release asset (or the old `data` branch)
+#   scripts/ci/snapshot.sh restore   # public/data <- release asset
 #   scripts/ci/snapshot.sh save      # public/data -> release asset
 #
 # Uses the GitHub CLI; GH_TOKEN must be set in CI.
@@ -20,10 +20,6 @@ case "${1:-}" in
     if gh release download "$TAG" --pattern "$ASSET" --dir "$TMP" --clobber 2>/dev/null; then
       tar -xzf "$TMP/$ASSET" -C "$DIR"
       echo "restored from release: $(ls "$DIR/champions" | wc -l) champion files"
-    elif git fetch --depth=1 origin data 2>/dev/null; then
-      # snapshots made before the release existed
-      git archive FETCH_HEAD | tar -x -C "$DIR"
-      echo "restored from data branch: $(ls "$DIR/champions" | wc -l) champion files"
     else
       echo "no snapshot yet"
     fi
