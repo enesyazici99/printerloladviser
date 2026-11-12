@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { adaptiveBuild, rowWeight, teamProfile, type DraftContext } from "@/lib/draft/build";
 import { CHAMPIONS, ITEMS, row } from "./helpers";
 
-const ctx = (over: Partial<DraftContext> = {}): DraftContext => ({ role: "adc", laneOpponent: 0, enemies: [], allies: [], currentPatch: "16.22", ...over });
+const ctx = (over: Partial<DraftContext> = {}): DraftContext => ({ champion: 51, role: "adc", laneOpponent: 0, enemies: [], allies: [], currentPatch: "16.22", ...over });
 
 describe("teamProfile", () => {
   it("describes how magic-heavy and tanky a team is", () => {
@@ -36,6 +36,20 @@ describe("rowWeight", () => {
     const shared = rowWeight(row({ opp: 202, w: 0, en: [54, 64, 103, 202, 412] }), c, CHAMPIONS, target);
     const different = rowWeight(row({ opp: 202, w: 0, en: [92, 238, 238, 202, 89] }), c, CHAMPIONS, target);
     expect(shared).toBeGreaterThan(different * 3);
+  });
+  it("also considers the player's own team, but less than the enemy team", () => {
+    const allies = [54, 64, 103, 412]; // tank top, AD jungle, AP mid, support
+    const c = ctx({ allies });
+    const allyTarget = teamProfile(allies, CHAMPIONS);
+    const sameTeam = rowWeight(row({ w: 0, tm: [54, 64, 103, 51, 412] }), c, CHAMPIONS, null, allyTarget);
+    const otherTeam = rowWeight(row({ w: 0, tm: [92, 238, 238, 51, 89] }), c, CHAMPIONS, null, allyTarget);
+    const unknownTeam = rowWeight(row({ w: 0 }), c, CHAMPIONS, null, allyTarget);
+    expect(sameTeam).toBeGreaterThan(otherTeam * 2);
+    expect(unknownTeam).toBe(1); // rows without team data are neither rewarded nor punished
+    // Four shared enemies move the weight more than four shared allies.
+    const enemies = [54, 64, 103, 412];
+    const sameEnemies = rowWeight(row({ w: 0, en: [54, 64, 103, 222, 412] }), ctx({ enemies }), CHAMPIONS, teamProfile(enemies, CHAMPIONS));
+    expect(sameEnemies).toBeGreaterThan(sameTeam);
   });
   it("leans slightly towards games that were won", () => {
     expect(rowWeight(row({ w: 1 }), ctx(), CHAMPIONS, null)).toBeGreaterThan(rowWeight(row({ w: 0 }), ctx(), CHAMPIONS, null));

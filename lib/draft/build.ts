@@ -8,6 +8,8 @@ import type { MatchRow, Role, StaticChampion, StaticItem } from "../types";
 type Champions = Record<string, StaticChampion>;
 
 export interface DraftContext {
+  /** the player's own champion */
+  champion: number;
   role: Role;
   /** enemy champion in the same role (0 = unknown) */
   laneOpponent: number;
@@ -55,8 +57,11 @@ const patchValue = (p: string) => {
   return a * 100 + b;
 };
 
-/** Weight of one pro game for the current draft (0 = ignore). */
-export function rowWeight(m: MatchRow, ctx: DraftContext, champions: Champions, target: Profile | null): number {
+/**
+ * Weight of one pro game for the current draft (0 = ignore).
+ * `target` / `allyTarget` are the profiles of the current enemy team and of the player's teammates.
+ */
+export function rowWeight(m: MatchRow, ctx: DraftContext, champions: Champions, target: Profile | null, allyTarget: Profile | null = null): number {
   let w = 1;
   // Recency: builds change with patches.
   const age = patchValue(ctx.currentPatch) - patchValue(m.v);
@@ -79,6 +84,18 @@ export function rowWeight(m: MatchRow, ctx: DraftContext, champions: Champions, 
     if (p && target) {
       const dist = Math.abs(p.ap - target.ap) * 2 + Math.abs(p.durability - target.durability) * 0.5 + Math.abs(p.cc - target.cc) * 0.3;
       w *= 0.6 + 1.2 * Math.exp(-dist * dist * 4);
+    }
+  }
+  // Own team: what a champion builds also depends on what the team lacks (frontline, magic damage…).
+  // A weaker signal than the enemy team, so the factors are smaller.
+  if (m.tm?.length && ctx.allies.length) {
+    let shared = 0;
+    for (const id of ctx.allies) if (m.tm.includes(id)) shared++;
+    w *= 1.3 ** shared;
+    const p = teamProfile(m.tm.filter((id) => id !== ctx.champion), champions);
+    if (p && allyTarget) {
+      const dist = Math.abs(p.ap - allyTarget.ap) * 2 + Math.abs(p.durability - allyTarget.durability) * 0.5;
+      w *= 0.8 + 0.5 * Math.exp(-dist * dist * 4);
     }
   }
   // Slight preference for games that were won.
@@ -107,7 +124,8 @@ export function adaptiveBuild(rows: MatchRow[], ctx: DraftContext, champions: Ch
   if (pool.length === 0) return null;
 
   const target = teamProfile(ctx.enemies, champions);
-  const weighted: WeightedRow[] = pool.map((m) => ({ m, w: rowWeight(m, ctx, champions, target) }));
+  const allyTarget = teamProfile(ctx.allies, champions);
+  const weighted: WeightedRow[] = pool.map((m) => ({ m, w: rowWeight(m, ctx, champions, target, allyTarget) }));
   const summary = summarize(weighted, items);
 
   const sum = weighted.reduce((s, r) => s + r.w, 0);
@@ -133,7 +151,7 @@ export function adaptiveBuild(rows: MatchRow[], ctx: DraftContext, champions: Ch
     games: pool.length,
     laneGames: ctx.laneOpponent ? pool.filter((m) => m.opp === ctx.laneOpponent).length : 0,
     effective: sumSq > 0 ? (sum * sum) / sumSq : 0,
-    lifted: ctx.enemies.length ? lifted : [],
+    lifted: ctx.enemies.length || ctx.allies.length ? lifted : [],
     similar,
   };
 }

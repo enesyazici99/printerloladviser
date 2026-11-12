@@ -37,6 +37,7 @@ export function BuildPanel({ currentPatch }: { currentPatch: string }) {
     return adaptiveBuild(
       file.matches,
       {
+        champion: champId,
         role: ROLES[myRole],
         laneOpponent: enemy[myRole],
         enemies: enemy.filter(Boolean),
