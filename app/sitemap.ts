@@ -1,26 +1,23 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { MetadataRoute } from "next";
-import { getChampions } from "@/lib/riot/ddragon";
+import { SITE_URL } from "@/lib/site";
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://lol-advisor.vercel.app";
+export const dynamic = "force-static";
 
-  const staticPages: MetadataRoute.Sitemap = [
-    { url: baseUrl, lastModified: new Date(), changeFrequency: "daily", priority: 1.0 },
-    { url: `${baseUrl}/advisor`, lastModified: new Date(), changeFrequency: "daily", priority: 0.8 },
-    { url: `${baseUrl}/live`, lastModified: new Date(), changeFrequency: "daily", priority: 0.7 },
-  ];
-
+export default function sitemap(): MetadataRoute.Sitemap {
+  let keys: string[] = [];
   try {
-    const champions = await getChampions();
-    const championPages: MetadataRoute.Sitemap = Object.keys(champions).map((key) => ({
-      url: `${baseUrl}/champion/${key}`,
-      lastModified: new Date(),
-      changeFrequency: "weekly" as const,
-      priority: 0.6,
-    }));
-
-    return [...staticPages, ...championPages];
+    const data = JSON.parse(fs.readFileSync(path.join(process.cwd(), "public", "data", "static", "en.json"), "utf8"));
+    keys = Object.values(data.champions as Record<string, { key: string }>).map((c) => c.key);
   } catch {
-    return staticPages;
+    // data not generated yet: list the fixed pages only
   }
+  const now = new Date();
+  return [
+    { url: `${SITE_URL}/`, lastModified: now, changeFrequency: "daily", priority: 1 },
+    { url: `${SITE_URL}/draft/`, lastModified: now, changeFrequency: "daily", priority: 0.9 },
+    { url: `${SITE_URL}/meta/`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
+    ...keys.map((key) => ({ url: `${SITE_URL}/champion/${key}/`, lastModified: now, changeFrequency: "daily" as const, priority: 0.7 })),
+  ];
 }

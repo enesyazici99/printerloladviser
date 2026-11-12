@@ -1,27 +1,25 @@
 {
-  "name": "test",
-  "version": "0.1.0",
+  "name": "lol-advisor",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "data": "node scripts/data/build-data.mjs",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "serve": "node scripts/serve.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.8.0",
-    "@supabase/supabase-js": "^2.97.0",
     "@tauri-apps/api": "^2.10.1",
-    "cheerio": "^1.2.0",
     "clsx": "^2.1.1",
-    "dotenv": "^17.3.1",
-    "framer-motion": "^12.34.2",
     "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18",
     "swr": "^2.4.0",
-    "tailwind-merge": "^3.5.0",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
@@ -39,7 +37,6 @@
     "playwright": "^1.58.2",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^4.0.18"
   }

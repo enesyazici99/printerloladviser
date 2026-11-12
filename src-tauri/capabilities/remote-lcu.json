@@ -1,8 +1,8 @@
 {
   "identifier": "remote-lcu",
-  "description": "Capability for remote URL (Vercel) to access LCU commands",
+  "description": "Capability for remote URL (GitHub Pages) to access LCU commands",
   "remote": {
-    "urls": ["https://lol-advisor.vercel.app/*"]
+    "urls": ["https://enesyazici99.github.io/lol-advisor/*"]
   },
   "permissions": [
     "core:default",

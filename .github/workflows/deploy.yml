@@ -1,0 +1,94 @@
+name: Build data and deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 */6 * * *" # refresh pro data four times a day
+  workflow_dispatch:
+    inputs:
+      max_matches:
+        description: "New matches to collect from the Riot API"
+        default: "1500"
+
+permissions:
+  contents: write # the data snapshot lives on the `data` branch
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  NEXT_PUBLIC_BASE_PATH: /lol-advisor
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The generated JSON is not part of the source tree; the last good
+      # snapshot is kept as a single commit on the `data` branch.
+      - name: Restore data snapshot
+        run: |
+          mkdir -p public/data
+          if git fetch --depth=1 origin data; then
+            git archive FETCH_HEAD | tar -x -C public/data
+            echo "restored snapshot: $(ls public/data/champions | wc -l) champion files"
+          else
+            echo "no data branch yet"
+          fi
+
+      # Only scheduled/manual runs talk to the Riot API. If the key is missing
+      # or expired the step fails and the site is deployed with the snapshot.
+      - name: Refresh data from the Riot API
+        id: refresh
+        if: github.event_name != 'push'
+        continue-on-error: true
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+        run: node scripts/data/build-data.mjs --max-matches=${{ github.event.inputs.max_matches || '1500' }}
+
+      - name: Save data snapshot
+        if: steps.refresh.outcome == 'success'
+        run: |
+          export GIT_INDEX_FILE="$RUNNER_TEMP/data-index"
+          git --work-tree=public/data add -A
+          tree=$(git write-tree)
+          commit=$(git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit-tree "$tree" -m "data snapshot $(date -u +%FT%TZ)")
+          git push --force origin "$commit:refs/heads/data"
+
+      - name: Check that data exists
+        run: test -f public/data/meta.json && test -f public/data/draft.json && test -f public/data/static/en.json
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # The match database is pipeline state, not something the site reads.
+      - run: rm -rf out/data/db && touch out/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

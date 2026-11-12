@@ -1,9 +1,25 @@
+"use client";
+
+import { useI18n } from "@/lib/i18n";
+import { useMeta } from "@/lib/data";
+
 export function Footer() {
+  const { t, lang } = useI18n();
+  const { data: meta } = useMeta();
   return (
-    <footer className="mt-10 sm:mt-16 py-4 sm:py-6 border-t border-border text-center">
-      <p className="text-xs sm:text-sm text-fg-muted">
-        LOL Advisor &middot; Data from probuildstats.com &middot; Not affiliated with Riot Games
-      </p>
+    <footer className="border-t border-border">
+      <div className="mx-auto w-full max-w-[1240px] space-y-1.5 px-3 py-6 text-xs leading-relaxed text-fg-muted sm:px-5">
+        <p>
+          {t("footer.source")}
+          {meta && (
+            <>
+              {" "}
+              {t("common.updated")}: {new Date(meta.generatedAt).toLocaleString(lang === "tr" ? "tr-TR" : "en-GB", { dateStyle: "medium", timeStyle: "short" })}
+            </>
+          )}
+        </p>
+        <p>{t("footer.legal")}</p>
+      </div>
     </footer>
   );
 }

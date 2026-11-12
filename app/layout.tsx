@@ -1,63 +1,36 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Header } from "@/components/layout/Header";
+import { Footer } from "@/components/layout/Footer";
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains",
-  display: "swap",
-});
+const inter = Inter({ subsets: ["latin", "latin-ext"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {
   title: {
-    default: "LOL Advisor — Pro Builds & Matchup Guide",
-    template: "%s — LOL Advisor",
+    default: "LoL Advisor — Pro Buildler ve Draft Asistanı",
+    template: "%s — LoL Advisor",
   },
   description:
-    "League of Legends pro build verileri, counter pick tavsiyeleri ve matchup analizi. ProBuilds, meta build, live game destegi.",
-  keywords: [
-    "League of Legends",
-    "LoL",
-    "pro builds",
-    "counter pick",
-    "matchup",
-    "advisor",
-    "build guide",
-  ],
+    "Challenger ve Grandmaster oyuncularının buildleri, eşya geçmişi, rünleri ve canlı şampiyon seçimi için draft önerileri.",
+  keywords: ["League of Legends", "LoL", "pro builds", "probuilds", "draft", "counter pick", "build"],
   openGraph: {
-    title: "LOL Advisor — Pro Builds & Matchup Guide",
-    description:
-      "League of Legends pro build verileri, counter pick tavsiyeleri ve matchup analizi.",
+    title: "LoL Advisor — Pro Buildler ve Draft Asistanı",
+    description: "Challenger buildleri, eşya geçmişi ve canlı draft önerileri.",
     type: "website",
     locale: "tr_TR",
   },
-  robots: {
-    index: true,
-    follow: true,
-  },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="tr" className="dark" suppressHydrationWarning>
-      <body
-        className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}
-      >
+    <html lang="tr" suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans`}>
         <Providers>
           <Header />
-          {children}
+          <main className="mx-auto w-full max-w-[1240px] px-3 pb-16 pt-4 sm:px-5">{children}</main>
+          <Footer />
         </Providers>
       </body>
     </html>

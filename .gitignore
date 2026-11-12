@@ -40,3 +40,7 @@ next-env.d.ts
 # tauri
 src-tauri/target/
 src-tauri/gen/
+
+# generated data + pipeline cache
+/public/data/
+/.cache/

@@ -1,61 +1,97 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { loadMeta, loadStatic, watchErrors } from "./support";
 
-test.describe("Home Page", () => {
-  test("should load the home page", async ({ page }) => {
-    await page.goto("/");
-    await expect(page).toHaveTitle(/LOL Advisor/);
+test.describe("home", () => {
+  test("shows every champion, the patch and the data sections", async ({ page, request }) => {
+    const errors = watchErrors(page);
+    const [stat, meta] = await Promise.all([loadStatic(request), loadMeta(request)]);
+    await page.goto("");
+    await expect(page.getByTestId("champion-grid").locator("a")).toHaveCount(Object.keys(stat.champions).length);
+    await expect(page.getByTestId("patch-badge")).toContainText(meta.patches[0]);
+    await expect(page.getByTestId("top-picks").locator("> div > div")).toHaveCount(5);
+    await expect(page.getByTestId("latest-feed").getByTestId("match-row").first()).toBeVisible();
+    expect(errors).toEqual([]);
   });
 
-  test("should display the logo", async ({ page }) => {
-    await page.goto("/");
-    await expect(page.locator("text=LOL").first()).toBeVisible();
+  test("search narrows the grid and reports when nothing matches", async ({ page }) => {
+    await page.goto("");
+    const grid = page.getByTestId("champion-grid");
+    await page.getByTestId("champion-search").fill("cait");
+    await expect(grid.locator("a")).toHaveCount(1);
+    await expect(grid.locator('a[data-champion="Caitlyn"]')).toBeVisible();
+    await page.getByTestId("champion-search").fill("KAI SA");
+    await expect(grid.locator('a[data-champion="Kaisa"]')).toBeVisible();
+    await page.getByTestId("champion-search").fill("zzzz");
+    await expect(grid.locator("a")).toHaveCount(0);
+    await expect(grid).toContainText("Şampiyon bulunamadı");
   });
 
-  test("should display the search bar", async ({ page }) => {
-    await page.goto("/");
-    const searchInput = page.locator('input[placeholder*="Search"]');
-    await expect(searchInput).toBeVisible();
+  test("role filter keeps only champions played in that role", async ({ page, request }) => {
+    const meta = await loadMeta(request);
+    // Expected set, computed like the page does: at least 15% of a champion's games in the role.
+    const expected = Object.entries(meta.champions).filter(([, c]) => {
+      const total = Object.values(c.roles).reduce((s, v) => s + (v?.[0] ?? 0), 0);
+      return total > 0 && (c.roles.support?.[0] ?? 0) / total >= 0.15;
+    }).length;
+    await page.goto("");
+    const links = page.getByTestId("champion-grid").locator("a");
+    await page.locator('button[data-role="support"]').click();
+    await expect(links).toHaveCount(expected);
+    expect(expected).toBeGreaterThan(5);
+    await page.locator('button[data-role="support"]').click(); // toggles off
+    await expect(links).toHaveCount(Object.keys(meta.champions).length);
   });
 
-  test("should display role filter buttons", async ({ page }) => {
-    await page.goto("/");
-    await expect(page.locator("text=ALL").first()).toBeVisible();
-    await expect(page.locator("text=TOP").first()).toBeVisible();
-    await expect(page.locator("text=MID").first()).toBeVisible();
+  test("a champion tile opens its pro build page", async ({ page }) => {
+    await page.goto("");
+    await page.getByTestId("champion-search").fill("ahri");
+    await page.locator('a[data-champion="Ahri"]').click();
+    await expect(page).toHaveURL(/\/champion\/Ahri\/$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Ahri");
   });
 
-  test("should display champion grid", async ({ page }) => {
-    await page.goto("/");
-    // Wait for champions to load (they come from DDragon)
-    await page.waitForTimeout(2000);
-    // Champion grid should have multiple cards
-    const links = page.locator('a[href^="/champion/"]');
-    const count = await links.count();
-    expect(count).toBeGreaterThan(0);
+  test("a feed row expands and links to the champion", async ({ page }) => {
+    await page.goto("");
+    const row = page.getByTestId("latest-feed").getByTestId("match-row").first();
+    await row.locator("button[aria-expanded]").click();
+    const detail = row.getByTestId("match-detail");
+    await expect(detail.getByTestId("rune-page")).toBeVisible();
+    await detail.getByRole("link").click();
+    await expect(page).toHaveURL(/\/champion\/[A-Za-z]+\/$/);
   });
 
-  test("should filter champions by search", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForTimeout(2000);
-
-    const searchInput = page.locator('input[placeholder*="Search"]');
-    await searchInput.fill("Ezreal");
-    await page.waitForTimeout(500);
-
-    // Should show Ezreal
-    await expect(page.locator("text=Ezreal").first()).toBeVisible();
+  test("language switch translates the page and is remembered", async ({ page }) => {
+    await page.goto("");
+    await expect(page.getByRole("navigation")).toContainText("Pro Buildler");
+    await page.getByRole("button", { name: "en", exact: true }).click();
+    await expect(page.getByRole("navigation")).toContainText("Pro Builds");
+    await expect(page.getByTestId("champion-search")).toHaveAttribute("placeholder", "Search champion…");
+    await page.reload();
+    await expect(page.getByRole("navigation")).toContainText("Pro Builds");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
   });
 
-  test("should navigate to champion page on click", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForTimeout(2000);
+  test("navigation reaches draft and meta", async ({ page }) => {
+    await page.goto("");
+    await page.getByRole("navigation").getByRole("link", { name: "Draft Asistanı" }).click();
+    await expect(page).toHaveURL(/\/draft\/(\?.*)?$/); // the draft page keeps its state in the query
+    await expect(page.getByTestId("draft-board")).toBeVisible();
+    await page.getByRole("navigation").getByRole("link", { name: "Meta" }).click();
+    await expect(page).toHaveURL(/\/meta\/$/);
+    await expect(page.getByTestId("meta-table")).toBeVisible();
+  });
 
-    // Click on any champion
-    const firstChampLink = page.locator('a[href^="/champion/"]').first();
-    await firstChampLink.click();
-    await page.waitForURL(/\/champion\//);
+  test("unknown pages show a 404", async ({ page }) => {
+    const res = await page.goto("champion/NotAChampion/");
+    expect(res?.status()).toBe(404);
+  });
 
-    // Should navigate to champion page
-    expect(page.url()).toContain("/champion/");
+  test("fits a phone screen without sideways scrolling @mobile", async ({ page }) => {
+    for (const path of ["", "draft/", "meta/", "champion/Ahri/"]) {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow, `horizontal overflow on "${path}"`).toBeLessThanOrEqual(1);
+    }
   });
 });
